@@ -800,29 +800,39 @@
       if (!d) return;
 
       const tEl = document.getElementById("eText");
-      const fEl = document.getElementById("eImg");
+      const fEl = document.getElementById("eImg"); // <- MUSS zu deinem neuen Single-Input passen
 
-      const text = (tEl.value || "").trim();
+      const text = (tEl ? tEl.value : "").trim();
       const files = Array.from((fEl && fEl.files) ? fEl.files : []);
-
       if (!text && files.length === 0) return;
 
       const newEntry = { description: text, images: [] };
+
+      // Bilder laden (mit EXIF-Fix)
       if (files.length > 0) {
         const images = await filesToCorrectedDataURLs(files);
         newEntry.images = images;
       }
 
+      // Eintrag speichern
+      d.entries = d.entries || [];
       d.entries.push(newEntry);
 
-      // Felder leeren
-      tEl.value = "";
-      if (lib) lib.value = "";
-      if (cam) cam.value = "";
+      // Inputs zuverlässig leeren (wichtig!)
+      if (tEl) tEl.value = "";
+      if (fEl) fEl.value = "";
 
-      saveStateDebounced();
-      render();
+      // Auswahl "festnageln" (falls irgendwas selectedDocId verliert)
+      state.selectedProjectId = pid;
+      state.selectedDocId = did;
+
+      // Speichern + UI Refresh
+      saveState();
+
+      // "Hartes" Refresh: erst DOM tick fertig, dann rendern
+      requestAnimationFrame(() => render());
     }
+
 
     /* =========================================================
        PDF EXPORT
@@ -997,5 +1007,6 @@
   </script>
 </body>
 </html>
+
 
 
