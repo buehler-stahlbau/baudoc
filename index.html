@@ -71,7 +71,7 @@
         <button id="tabProjects" class="tab">Bauvorhaben</button>
         <button id="tabArchive" class="tab">Archiv</button>
       </div>
-      <img id="appLogo" src="logo.jpg" alt="Bühler Logo" />
+      <img id="appLogo" src="logo.png" alt="Bühler Logo" />
     </div>
 
     <div id="app"></div>
@@ -196,22 +196,31 @@
        Logo -> DataURL (für PDF)
     ========================================================= */
     let logoDataURL = null;
-    function imageElementToDataURL(imgEl){
+
+    // Lädt logo.png als DataURL (PNG) -> Transparenz bleibt erhalten, iOS zuverlässig
+    async function ensureLogoDataURL(){
+      if (logoDataURL) return logoDataURL;
+
       try {
-        const c = document.createElement("canvas");
-        const w = imgEl.naturalWidth || imgEl.width || 1;
-        const h = imgEl.naturalHeight || imgEl.height || 1;
-        c.width = w; c.height = h;
-        const ctx = c.getContext("2d");
-        ctx.drawImage(imgEl, 0, 0);
-        return c.toDataURL("image/jpeg", 0.92);
+        // Fetch ist hier stabiler als Canvas (iOS / Timing / Decode-Probleme)
+        const resp = await fetch("logo.png", { cache: "no-store" });
+        if (!resp.ok) throw new Error("logo.png nicht gefunden");
+
+        const blob = await resp.blob();
+        logoDataURL = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result);
+          r.onerror = reject;
+          r.readAsDataURL(blob);
+        });
+
+        return logoDataURL;
       } catch (e) {
-        console.warn("Logo->DataURL fehlgeschlagen", e);
+        console.warn("Logo konnte nicht als DataURL geladen werden", e);
+        logoDataURL = null;
         return null;
       }
     }
-    const appLogoEl = document.getElementById("appLogo");
-    appLogoEl.addEventListener("load", () => { logoDataURL = imageElementToDataURL(appLogoEl); });
 
     /* =========================================================
        EXIF-ORIENTATION FIX (JPEG) -> Pixel korrekt einbacken
@@ -815,6 +824,8 @@
       const d = p ? findDoc(p, did) : null;
       if (!d) return;
 
+      await ensureLogoDataURL();
+      
       const pdf = new jsPDF({ unit: "pt", format: "a4" });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
@@ -833,7 +844,7 @@
           try {
             const logoW = 150;
             const logoH = 50;
-            pdf.addImage(logoDataURL, "JPEG", pageWidth - margin - logoW, margin - 10, logoW, logoH);
+            pdf.addImage(logoDataURL, "PNG", pageWidth - margin - logoW, margin - 10, logoW, logoH);
           } catch (e) {
             console.warn("Logo konnte nicht in PDF", e);
           }
@@ -908,7 +919,7 @@
         ensureSpace(minBlockH);
 
         pdf.text(textLines, margin, y);
-        y += textH + 3;
+        y += textH + 1;
 
         if (infos.length) {
           let i = 0;
@@ -969,6 +980,7 @@
   </script>
 </body>
 </html>
+
 
 
 
