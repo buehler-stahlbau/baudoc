@@ -668,12 +668,8 @@
 
           <div class="row wrap">
             <div class="grow">
-              <input id="eImgLib" type="file" multiple accept="image/*" />
-              <div class="muted">Mediathek / Dateien</div>
-            </div>
-            <div class="grow">
-              <input id="eImgCam" type="file" multiple accept="image/*" capture="environment" />
-              <div class="muted">Kamera</div>
+              <input id="eImg" type="file" multiple accept="image/*" />
+              <div class="muted">Bilder hinzufügen (Mediathek / Kamera / Dateien</div>
             </div>
           </div>
 
@@ -727,12 +723,8 @@
 
               <div class="row wrap" style="margin-top:6px;">
                 <div class="grow">
-                  <input type="file" class="entryImgLib" data-entry-index="${i}" multiple accept="image/*" />
-                  <div class="muted">Mediathek</div>
-                </div>
-                <div class="grow">
-                  <input type="file" class="entryImgCam" data-entry-index="${i}" multiple accept="image/*" capture="environment" />
-                  <div class="muted">Kamera</div>
+                  <input type="file" class="entryImg" data-entry-index="${i}" multiple accept="image/*" />
+                  <div class="muted">Bilder hinzufügen</div>
                 </div>
               </div>
             </div>
@@ -776,18 +768,21 @@
         render();
       }
 
-      el.querySelectorAll(".entryImgLib").forEach(input => {
+      el.querySelectorAll(".entryImg").forEach(input => {
         input.addEventListener("change", async () => {
           const idx = parseInt(input.getAttribute("data-entry-index"), 10);
-          await handleAddImages(input, idx);
+          const files = Array.from(input.files || []);
+          if (!files.length || !doc.entries[idx]) return;
+
+          const images = await filesToCorrectedDataURLs(files);
+          doc.entries[idx].images = (doc.entries[idx].images || []).concat(images);
+
+          input.value = ""; // WICHTIG
+          saveState();
+          render();
         });
       });
-      el.querySelectorAll(".entryImgCam").forEach(input => {
-        input.addEventListener("change", async () => {
-          const idx = parseInt(input.getAttribute("data-entry-index"), 10);
-          await handleAddImages(input, idx);
-        });
-      });
+
 
       el.querySelectorAll("button[data-entry-del]").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -805,14 +800,10 @@
       if (!d) return;
 
       const tEl = document.getElementById("eText");
-      const lib = document.getElementById("eImgLib");
-      const cam = document.getElementById("eImgCam");
+      const fEl = document.getElementById("eImg");
 
       const text = (tEl.value || "").trim();
-      const files = [
-        ...Array.from((lib && lib.files) ? lib.files : []),
-        ...Array.from((cam && cam.files) ? cam.files : [])
-      ];
+      const files = Array.from((fEl && fEl.files) ? fEl.files : []);
 
       if (!text && files.length === 0) return;
 
@@ -1006,3 +997,4 @@
   </script>
 </body>
 </html>
+
