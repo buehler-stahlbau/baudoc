@@ -673,7 +673,7 @@
             </div>
           </div>
 
-          <button class="primary" id="addE">+ Eintrag</button>
+          <button type="button" class="primary" id="addE">+ Eintrag</button>
           <hr />
           <h3>Einträge</h3>
           <div id="elist"></div>
@@ -800,7 +800,7 @@
       if (!d) return;
 
       const tEl = document.getElementById("eText");
-      const fEl = document.getElementById("eImg"); // <- MUSS zu deinem neuen Single-Input passen
+      const fEl = document.getElementById("eImg"); // <- dein EINZIGER Upload-Input
 
       const text = (tEl ? tEl.value : "").trim();
       const files = Array.from((fEl && fEl.files) ? fEl.files : []);
@@ -808,29 +808,26 @@
 
       const newEntry = { description: text, images: [] };
 
-      // Bilder laden (mit EXIF-Fix)
       if (files.length > 0) {
         const images = await filesToCorrectedDataURLs(files);
         newEntry.images = images;
       }
 
-      // Eintrag speichern
-      d.entries = d.entries || [];
+      d.entries = Array.isArray(d.entries) ? d.entries : [];
       d.entries.push(newEntry);
 
-      // Inputs zuverlässig leeren (wichtig!)
+      // Felder leeren (damit keine "Anzahl Bilder" stehen bleibt)
       if (tEl) tEl.value = "";
       if (fEl) fEl.value = "";
 
-      // Auswahl "festnageln" (falls irgendwas selectedDocId verliert)
+      // Sicherstellen, dass wir in der gleichen Doku bleiben
       state.selectedProjectId = pid;
       state.selectedDocId = did;
 
-      // Speichern + UI Refresh
       saveState();
 
-      // "Hartes" Refresh: erst DOM tick fertig, dann rendern
-      requestAnimationFrame(() => render());
+      // WICHTIG: Render garantiert nach dem aktuellen Click-Event
+      setTimeout(() => render(), 0);
     }
 
 
@@ -1007,6 +1004,7 @@
   </script>
 </body>
 </html>
+
 
 
 
