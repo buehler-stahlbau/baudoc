@@ -108,8 +108,9 @@
     .images { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
     .image-wrapper { position:relative; display:inline-block; }
     .images img { width:80px; height:80px; object-fit:cover; border-radius:4px; border:1px solid #e5e7eb; }
-    .img-delete { position:absolute; top:-6px; right:-6px; background:#dc2626; color:#fff; border:none; border-radius:50%; width:18px; height:18px; font-size:10px; cursor:pointer; }
-
+    .img-delete { position:absolute; top:-6px; right:-6px; background: var(--brand-red); color:#fff; border:1px solid var(--brand-red-dark); border-radius:50%; width:18px; height:18px; font-size:10px; line-height:16px; text-align:center; cursor:pointer; }
+    .img-delete:hover { background: var(--brand-red-dark); }
+    
     /* PDF Modal */
     #pdfModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; }
     #pdfModal .inner { position:absolute; inset:14px; background:#fff; border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
@@ -1050,6 +1051,7 @@
   </script>
 </body>
 </html>
+
 
 
 
