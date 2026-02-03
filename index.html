@@ -378,6 +378,7 @@
     }
 
     async function fileToCorrectedDataURL(file){
+      // 1) ArrayBuffer laden (für JPEG-Erkennung + EXIF)
       const buf = await new Promise((resolve, reject) => {
         const r = new FileReader();
         r.onload = e => resolve(e.target.result);
@@ -385,6 +386,7 @@
         r.readAsArrayBuffer(file);
       });
 
+      // 2) Als DataURL laden (zum Decoden ins <img>)
       const dataURL = await new Promise((resolve, reject) => {
         const r = new FileReader();
         r.onload = e => resolve(e.target.result);
@@ -392,11 +394,17 @@
         r.readAsDataURL(file);
       });
 
+      // Nicht-JPEG -> 그대로
       if (!isJpegByHeader(buf)) return dataURL;
 
-      const orientation = getExifOrientation(buf);
-      if (!orientation || orientation === 1) return dataURL;
+      // EXIF Orientation lesen
+      const orientation = getExifOrientation(buf) || 1;
+      if (orientation === 1) {
+        // trotzdem ggf. komprimieren/skalieren? (optional)
+        return dataURL;
+      }
 
+      // Bild decoden
       const img = await new Promise((resolve, reject) => {
         const im = new Image();
         im.onload = () => resolve(im);
@@ -404,21 +412,59 @@
         im.src = dataURL;
       });
 
-      const w = img.naturalWidth || img.width;
-      const h = img.naturalHeight || img.height;
+      const srcW = img.naturalWidth || img.width || 1;
+      const srcH = img.naturalHeight || img.height || 1;
+
+      // OPTIONAL (für PDF-Größe): Upload-Bilder verkleinern + komprimieren
+      // Wenn du das NOCH NICHT willst, setze MAX_W/MAX_H sehr groß oder ratio=1
+      const MAX_W = 1800;
+      const MAX_H = 1800;
+      const ratio = Math.min(MAX_W / srcW, MAX_H / srcH, 1);
+
+      const drawW = Math.round(srcW * ratio);
+      const drawH = Math.round(srcH * ratio);
 
       const rotate90 = [5,6,7,8].includes(orientation);
+
       const canvas = document.createElement("canvas");
-      canvas.width = rotate90 ? h : w;
-      canvas.height = rotate90 ? w : h;
+      canvas.width  = rotate90 ? drawH : drawW;
+      canvas.height = rotate90 ? drawW : drawH;
 
       const ctx = canvas.getContext("2d");
       if (!ctx) return dataURL;
 
       ctx.setTransform(1,0,0,1,0,0);
-      drawImageWithOrientation(ctx, img, orientation, w, h);
 
-      return canvas.toDataURL("image/jpeg", 0.92);
+      // Orientierung korrekt auf Canvas anwenden
+      switch (orientation) {
+        case 2: // mirror horizontal
+          ctx.translate(drawW, 0); ctx.scale(-1, 1);
+          break;
+        case 3: // rotate 180
+          ctx.translate(drawW, drawH); ctx.rotate(Math.PI);
+          break;
+        case 4: // mirror vertical
+          ctx.translate(0, drawH); ctx.scale(1, -1);
+          break;
+        case 5: // mirror horizontal + rotate 90 CW
+          ctx.rotate(0.5 * Math.PI); ctx.scale(1, -1);
+          break;
+        case 6: // rotate 90 CW
+          ctx.rotate(0.5 * Math.PI); ctx.translate(0, -drawH);
+          break;
+        case 7: // mirror horizontal + rotate 90 CCW
+          ctx.rotate(0.5 * Math.PI); ctx.translate(drawW, -drawH); ctx.scale(-1, 1);
+          break;
+        case 8: // rotate 90 CCW
+          ctx.rotate(-0.5 * Math.PI); ctx.translate(-drawW, 0);
+          break;
+      }
+
+      // WICHTIG: immer mit Zielgröße zeichnen (sonst Clip/Verzerrung)
+      ctx.drawImage(img, 0, 0, drawW, drawH);
+
+      // Als JPEG raus (Qualität reduziert -> PDF wird kleiner)
+      return canvas.toDataURL("image/jpeg", 0.75);
     }
 
     async function filesToCorrectedDataURLs(files){
@@ -1069,6 +1115,7 @@
   </script>
 </body>
 </html>
+
 
 
 
