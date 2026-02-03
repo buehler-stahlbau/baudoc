@@ -1063,9 +1063,8 @@
 
             let rowH = 0;
             const dims = row.map(it => {
-              const scale = slotW / it.w;
-              let hh = it.h * scale;
-              if (hh > maxImgH) hh = maxImgH;
+              // immer gleiche Breite slotW
+              const hh = slotW * (it.h / it.w);  // proportional
               rowH = Math.max(rowH, hh);
               return { w: slotW, h: hh };
             });
@@ -1115,6 +1114,7 @@
   </script>
 </body>
 </html>
+
 
 
 
