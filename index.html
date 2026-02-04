@@ -1103,7 +1103,6 @@ window.addEventListener("unhandledrejection", (e) => {
                 const fmt = (typeof it.src === "string" && it.src.startsWith("data:image/png")) ? "PNG" : "JPEG";
                 pdf.addImage(it.src, fmt, x, y, w, h);
               } catch(e) { console.warn("Bild nicht in PDF", e); }
-              catch(e) { console.warn("Bild nicht in PDF", e); }
               x += slotW + gap;
             }
 
@@ -1141,6 +1140,7 @@ window.addEventListener("unhandledrejection", (e) => {
   </script>
 </body>
 </html>
+
 
 
 
