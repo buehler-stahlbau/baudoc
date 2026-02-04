@@ -1107,7 +1107,7 @@ window.addEventListener("unhandledrejection", (e) => {
               const { w, h } = dims[j];
               try {
                 const fmt = (typeof it.src === "string" && it.src.startsWith("data:image/png")) ? "PNG" : "JPEG";
-                pdf.addImage(it.src, fmt, x, y, w, h);
+                pdf.addImage(it.src, "JPEG", x, y, w, h);
               } catch(e) { console.warn("Bild nicht in PDF", e); }
               x += slotW + gap;
             }
@@ -1146,6 +1146,7 @@ window.addEventListener("unhandledrejection", (e) => {
   </script>
 </body>
 </html>
+
 
 
 
