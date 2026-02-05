@@ -180,6 +180,31 @@
   </div>
 
   <script>
+    const BAUDOC_PASSWORD = "MEIN-FIRMENPASSWORT"; // <-- hier ändern
+    const AUTH_KEY = "baudoc_auth_ok";
+    function checkAuthOrBlock(){
+      try {
+        const ok = localStorage.getItem(AUTH_KEY);
+        if (ok === "true") return;
+
+        let input = prompt("BauDoc – interner Zugang\n\nBitte Passwort eingeben:");
+        if (input === null) {
+          document.body.innerHTML = "<h2 style='padding:20px'>Zugriff abgebrochen</h2>";
+          throw new Error("Auth abgebrochen");
+        }
+
+        if (input !== BAUDOC_PASSWORD) {
+          alert("Falsches Passwort");
+          document.body.innerHTML = "<h2 style='padding:20px'>Zugriff verweigert</h2>";
+          throw new Error("Auth fehlgeschlagen");
+        }
+
+        localStorage.setItem(AUTH_KEY, "true");
+      } catch (e) {
+        throw e;
+      }
+    }
+
     window.addEventListener("error", (e) => {
   alert("JS-Fehler: " + (e.message || "unbekannt") + "\nDatei: " + (e.filename||"") + "\nZeile: " + (e.lineno||""));
 });
@@ -1155,13 +1180,16 @@ window.addEventListener("unhandledrejection", (e) => {
        START
     ========================================================= */
     (async function init(){
+      checkAuthOrBlock();   // <-- NEU
       await loadState();
       render();
       saveStateDebounced();
     })();
+
   </script>
 </body>
 </html>
+
 
 
 
