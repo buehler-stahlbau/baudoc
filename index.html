@@ -683,7 +683,7 @@
         ${onlyFavorites ? `<p class="muted">Hier siehst du nur Projekte mit Stern.</p>` : `
         <div class="row wrap">
           <div class="grow">
-            <input id="newProjectName" type="text" placeholder="Neues Bauvorhaben" />
+            <input id="newProjectName" type="text" placeholder="Bauvorhaben-Nr. (5-stellig)" inputmode="numeric" minlength="5" maxlength="5" />
           </div>
           <button class="primary" id="addP" type="button">+ Hinzufügen</button>
         </div>`}
@@ -756,9 +756,31 @@
       // Hinzufügen nur in "Bauvorhaben"
       if (!onlyFavorites) {
         document.getElementById("addP").onclick = () => {
-          const val = document.getElementById("newProjectName").value.trim();
-          if (!val) return;
-          state.projects.push({ id: Date.now().toString(), name: val, docs: [], fav: false });
+          const input = document.getElementById("newProjectName");
+          const raw = (input.value || "").trim();
+
+          // nur 5 Ziffern erlauben
+          if (!/^\d{5}$/.test(raw)) {
+            alert("Bitte eine 5-stellige Bauvorhaben-Nummer eingeben (nur Ziffern).");
+            input.focus();
+            return;
+          }
+
+          // Doppelbelegung prüfen (auch im Archiv!)
+          const exists =
+            (state.projects || []).some(p => String(p.name) === raw) ||
+            (state.archivedProjects || []).some(p => String(p.name) === raw);
+
+          if (exists) {
+            alert(`Bauvorhaben ${raw} existiert bereits.`);
+            input.focus();
+            return;
+          }
+
+          // Wenn du die Nummer auch als technische ID nutzen willst:
+          state.projects.push({ id: raw, name: raw, docs: [], fav: false });
+
+          input.value = "";
           saveStateDebounced();
           render();
         };
@@ -1183,3 +1205,4 @@
   </script>
 </body>
 </html>
+
