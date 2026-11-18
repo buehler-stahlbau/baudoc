@@ -705,7 +705,7 @@ function renderDocEditor(container, p, d) {
       <label class="switch-row">
         <input type="checkbox" id="protoToggle" ${d.protocol && d.protocol.enabled ? "checked" : ""} />
         <span class="switch" aria-hidden="true"></span>
-        <span><strong>Abnahmeprotokoll</strong><br><span class="muted">mit Anwesenden und Unterschriften im PDF</span></span>
+        <span class="switch-text"><strong>Abnahmeprotokoll</strong><span class="muted">mit Anwesenden und Unterschriften</span></span>
       </label>
       <div id="protoBox"></div>
 
@@ -715,7 +715,7 @@ function renderDocEditor(container, p, d) {
         <div class="images" id="draftImages">${pend.map((id) => thumbHtml({ id }, true)).join("")}</div>
         <div class="row wrap entry-actions">
           ${photoButtons("newImg")}
-          <button type="button" class="primary" id="addE">Eintrag speichern</button>
+          <button type="button" class="primary" id="addE"><span class="long">Eintrag speichern</span><span class="short">Speichern</span></button>
         </div>
       </div>
 
@@ -811,7 +811,7 @@ function renderProtocol(box, p, d) {
   const pr = d.protocol;
   box.appendChild(el(`
     <div class="proto">
-      <h4>Anwesende <span class="muted">· Unterschrift direkt hinter dem Namen</span></h4>
+      <h4>Anwesende</h4>
       <div id="attList">
         ${pr.attendees.map((a) => `
           <div class="att-row" data-att="${h(a.id)}">
@@ -822,7 +822,7 @@ function renderProtocol(box, p, d) {
           </div>`).join("")}
       </div>
       <button class="secondary small" id="attAdd" type="button">+ Person hinzufügen</button>
-      <p class="muted proto-hint">Ohne Unterschrift bleibt das Feld im PDF frei (zum Unterschreiben auf Papier). Nachträglich unterschreiben: hier unterschreiben und PDF neu erstellen.</p>
+      <p class="proto-hint">Ohne Unterschrift bleibt das Feld im PDF frei (z. B. für Papier).</p>
     </div>`));
 
   const cur = () => {
