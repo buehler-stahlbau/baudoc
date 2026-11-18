@@ -16,6 +16,7 @@
   <meta name="format-detection" content="telephone=no">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon-192.png">
+  <link rel="preload" href="logo.png" as="image">
 
   <!-- Bibliotheken liegen im Repo (funktioniert auch offline) -->
   <script src="vendor/jspdf.umd.min.js"></script>
@@ -70,7 +71,7 @@
       box-shadow: 0 1px 4px rgba(0,0,0,.05);
     }
     .appbar-inner { position: relative; max-width: 1200px; margin: 0 auto; display: flex; align-items: center; gap: 8px; }
-    .appbar .logo { height: 32px; width: auto; flex: 0 0 auto; margin-left: 4px; }
+    .appbar .logo { height: 30px; width: auto; flex: 0 0 auto; margin-left: 4px; }
     .ico { width: 22px; height: 22px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
     .tabs { display: flex; gap: 6px; align-items: center; }
@@ -125,7 +126,7 @@
       .tab.active .cnt { background: var(--brand-red); }
       .sync-chip { display: none; }
       .sync-dot { display: block; }
-      .appbar .logo { height: 26px; margin-left: auto; }
+      .appbar .logo { height: 22px; margin-left: auto; }
       .search-wrap { display: none; }
       /* Suche aufgeklappt: Feld legt sich über die Zeile */
       .appbar.searching .search-wrap { display: flex; position: absolute; inset: 0; background: #fff; z-index: 2; gap: 6px; }
@@ -135,12 +136,12 @@
     @media (max-width: 400px){
       .tabs, .appbar-inner { gap: 4px; }
       .tab, #searchBtn { width: 40px; height: 40px; }
-      .appbar .logo { height: 23px; }
+      .appbar .logo { height: 17px; }
     }
     @media (max-width: 350px){
       .tab, #searchBtn { width: 36px; height: 36px; }
       .ico { width: 20px; height: 20px; }
-      .appbar .logo { height: 17px; }
+      .appbar .logo { height: 14px; }
     }
 
     /* ---------- Inhalt ---------- */
