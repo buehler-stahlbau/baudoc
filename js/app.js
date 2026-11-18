@@ -634,7 +634,7 @@ function renderProjectDetail(app, p, d) {
     const r = el(`
       <div class="doc-item ${d && d.id === doc.id ? "selected" : ""}" data-doc-id="${h(doc.id)}">
         <div class="grow">
-          <div class="doc-title">${doc.protocol && doc.protocol.enabled ? `<span class="badge-abn">Abnahme</span> ` : ""}${h(doc.title)}</div>
+          <div class="doc-title">${h(doc.title)}${doc.protocol && doc.protocol.enabled ? ` <span class="badge-abn">Abnahme</span>` : ""}</div>
           <div class="muted doc-meta">${formatDateDE(doc.date)} · ${doc.entries.length} Einträge · ${n} Fotos</div>
         </div>
         <button class="secondary small" data-a="pdf" type="button">PDF</button>
@@ -724,7 +724,7 @@ function renderDocEditor(container, p, d) {
 
       <div class="row wrap doc-footer">
         <button class="primary" id="pdfDoc" type="button">PDF erstellen</button>
-        <button class="danger-outline" id="delDoc" type="button">Dokumentation löschen</button>
+        <button class="danger-outline" id="delDoc" type="button">Doku löschen</button>
       </div>
     </div>`);
   container.appendChild(card);
