@@ -10,7 +10,9 @@ import {
   S, load, saveNow, saveSoon, touchProject, touchDoc, onChange,
   findProject, findByNumber, newProject, moveLocal, removeProjectLocal,
   allProjects, imagesOfDoc, imagesOfProject, favoritesChanged, resetLocal, setTitleParts,
+  newProtocol, CONTRACTOR_COMPANY,
 } from "./store.js";
+import { captureSignature } from "./signature.js";
 import { processFile, makeThumb } from "./images.js";
 import { buildPdf, PDF_MAX_BYTES } from "./pdf.js";
 import { exportBackup, importBackup } from "./backup.js";
@@ -603,7 +605,7 @@ function renderProjectDetail(app, p, d) {
     const now = new Date();
     const doc = {
       id: newId(),
-      title: formatDateDE(now) + " Dokumentation",
+      title: "Dokumentation",
       date: now.toISOString(),
       updatedAt: Date.now(),
       entries: [],
@@ -626,7 +628,7 @@ function renderProjectDetail(app, p, d) {
     const r = el(`
       <div class="doc-item ${d && d.id === doc.id ? "selected" : ""}" data-doc-id="${h(doc.id)}">
         <div class="grow">
-          <div class="doc-title">${h(doc.title)}</div>
+          <div class="doc-title">${doc.protocol && doc.protocol.enabled ? `<span class="badge-abn">Abnahme</span> ` : ""}${h(doc.title)}</div>
           <div class="muted doc-meta">${formatDateDE(doc.date)} · ${doc.entries.length} Einträge · ${n} Fotos</div>
         </div>
         <button class="secondary small" data-a="pdf" type="button">PDF</button>
@@ -693,6 +695,13 @@ function renderDocEditor(container, p, d) {
           <input id="docDate" type="date" value="${toDateInput(d.date)}" />
         </div>
       </div>
+
+      <label class="switch-row">
+        <input type="checkbox" id="protoToggle" ${d.protocol && d.protocol.enabled ? "checked" : ""} />
+        <span class="switch" aria-hidden="true"></span>
+        <span><strong>Abnahmeprotokoll</strong><br><span class="muted">mit Anwesenden und Unterschriften im PDF</span></span>
+      </label>
+      <div id="protoBox"></div>
 
       <div class="new-entry">
         <label class="field-label" for="eText">Neuer Eintrag</label>
@@ -766,7 +775,135 @@ function renderDocEditor(container, p, d) {
 
   $("#addE").onclick = () => addEntry();
 
+  $("#protoToggle").addEventListener("change", (e) => {
+    const { p: cp, d: cd } = ctx();
+    if (!cd) return;
+    if (e.target.checked) {
+      if (!cd.protocol) cd.protocol = newProtocol(cp);
+      cd.protocol.enabled = true;
+    } else if (cd.protocol) {
+      cd.protocol.enabled = false; // Angaben bleiben erhalten, falls wieder eingeschaltet wird
+    }
+    touchDoc(cp, cd);
+    renderNow();
+  });
+  if (d.protocol && d.protocol.enabled) renderProtocol($("#protoBox"), p, d);
+
   renderEntries($("#elist"), p, d);
+}
+
+/* ---------- Abnahmeprotokoll: Anwesende + Unterschriften ---------- */
+function sigCell(sig, sigAt, key) {
+  return sig
+    ? `<button class="sig-thumb" data-sign="${h(key)}" type="button" title="Unterschrift ändern">
+         <img src="${sig}" alt="Unterschrift" /><span class="muted">${sigAt ? formatDateDE(sigAt) : ""}</span>
+       </button>`
+    : `<button class="secondary small sign-btn" data-sign="${h(key)}" type="button">✍ Unterschreiben</button>`;
+}
+
+function renderProtocol(box, p, d) {
+  const pr = d.protocol;
+  box.appendChild(el(`
+    <div class="proto">
+      <h4>Anwesende</h4>
+      <div id="attList">
+        ${pr.attendees.map((a) => `
+          <div class="att-row" data-att="${h(a.id)}">
+            <input class="att-name" type="text" placeholder="Name" value="${h(a.name)}" autocomplete="off" />
+            <input class="att-company" type="text" placeholder="Firma" value="${h(a.company)}" autocomplete="off" />
+            <div class="att-sig">${sigCell(a.sig, a.sigAt, "att:" + a.id)}</div>
+            <button class="icon-btn att-del" data-del-att="${h(a.id)}" type="button" aria-label="Person entfernen">×</button>
+          </div>`).join("")}
+      </div>
+      <button class="secondary small" id="attAdd" type="button">+ Person hinzufügen</button>
+
+      <h4>Unterschriften am Ende des Protokolls</h4>
+      <div class="party-grid">
+        <div class="party">
+          <div class="field-label">Auftragnehmer · ${h(CONTRACTOR_COMPANY)}</div>
+          <input class="party-name" data-party="contractor" type="text" placeholder="Name (Bauleiter)" value="${h(pr.contractor.name)}" />
+          ${sigCell(pr.contractor.sig, pr.contractor.sigAt, "party:contractor")}
+        </div>
+        <div class="party">
+          <div class="field-label">Auftraggeber${p.client ? " · " + h(p.client) : ""}</div>
+          <input class="party-name" data-party="client" type="text" placeholder="Name" value="${h(pr.client.name)}" />
+          ${sigCell(pr.client.sig, pr.client.sigAt, "party:client")}
+        </div>
+      </div>
+      <p class="muted">Nicht unterschriebene Felder bleiben im PDF frei – zum Unterschreiben auf Papier. Nachträglich unterschreiben: hier unterschreiben und PDF neu erstellen.</p>
+    </div>`));
+
+  const cur = () => {
+    const { p: cp, d: cd } = ctx();
+    return cd && cd.protocol ? { cp, cd, pr: cd.protocol } : null;
+  };
+
+  $$(".att-row", box).forEach((row) => {
+    const id = row.dataset.att;
+    const upd = () => {
+      const c = cur(); if (!c) return;
+      const a = c.pr.attendees.find((x) => x.id === id); if (!a) return;
+      a.name = $(".att-name", row).value;
+      a.company = $(".att-company", row).value;
+      touchDoc(c.cp, c.cd);
+    };
+    $(".att-name", row).addEventListener("input", upd);
+    $(".att-company", row).addEventListener("input", upd);
+  });
+  $$("[data-del-att]", box).forEach((b) => {
+    b.onclick = () => {
+      const c = cur(); if (!c) return;
+      const a = c.pr.attendees.find((x) => x.id === b.dataset.delAtt);
+      if (a && a.sig && !confirm(`${a.name || "Person"} hat bereits unterschrieben. Trotzdem entfernen?`)) return;
+      c.pr.attendees = c.pr.attendees.filter((x) => x.id !== b.dataset.delAtt);
+      touchDoc(c.cp, c.cd);
+      renderNow();
+    };
+  });
+  $("#attAdd").onclick = () => {
+    const c = cur(); if (!c) return;
+    const id = newId();
+    c.pr.attendees.push({ id, name: "", company: "", sig: null, sigAt: null });
+    touchDoc(c.cp, c.cd);
+    renderNow();
+    const inp = $(`[data-att="${CSS.escape(id)}"] .att-name`);
+    if (inp) inp.focus();
+  };
+  $$(".party-name", box).forEach((inp) => inp.addEventListener("input", () => {
+    const c = cur(); if (!c) return;
+    c.pr[inp.dataset.party].name = inp.value;
+    touchDoc(c.cp, c.cd);
+  }));
+
+  $$("[data-sign]", box).forEach((b) => {
+    b.onclick = async () => {
+      const c = cur(); if (!c) return;
+      const [kind, key] = b.dataset.sign.split(":");
+      let target, title, subtitle;
+      if (kind === "att") {
+        target = c.pr.attendees.find((x) => x.id === key);
+        if (!target) return;
+        if (!target.name.trim()) {
+          toast("Bitte zuerst den Namen eintragen.", "warn");
+          const nameEl = $(`[data-att="${CSS.escape(key)}"] .att-name`);
+          if (nameEl) nameEl.focus();
+          return;
+        }
+        title = `Unterschrift ${target.name}`;
+        subtitle = target.company;
+      } else {
+        target = c.pr[key];
+        title = `Unterschrift ${key === "contractor" ? "Auftragnehmer" : "Auftraggeber"}${target.name ? " – " + target.name : ""}`;
+        subtitle = key === "contractor" ? CONTRACTOR_COMPANY : (c.cp.client || "");
+      }
+      const res = await captureSignature({ title, subtitle, canRemove: !!target.sig });
+      if (res === undefined) return;
+      target.sig = res;
+      target.sigAt = res ? Date.now() : null;
+      touchDoc(c.cp, c.cd);
+      renderNow();
+    };
+  });
 }
 
 async function processFiles(files) {
@@ -904,7 +1041,8 @@ async function exportPdf(pid, did) {
   setBusy("PDF wird erstellt …");
   try {
     const { blob, filename, missing } = await buildPdf(p, d, (m) => setBusy(m));
-    openPdfPreview(blob, filename);
+    const what = d.protocol && d.protocol.enabled ? "Abnahmeprotokoll" : "Dokumentation";
+    openPdfPreview(blob, filename, `BV ${p.number}${p.client ? " " + p.client : ""} – ${what} „${d.title}“ vom ${formatDateDE(d.date)}`);
     if (missing) toast(`${missing} Foto(s) konnten nicht geladen werden (offline?).`, "warn", 7000);
     if (blob.size > PDF_MAX_BYTES) toast(`PDF ist ${(blob.size / 1048576).toFixed(1)} MB groß (über 15 MB).`, "warn", 7000);
     if (od.isConfigured()) {
@@ -920,7 +1058,7 @@ async function exportPdf(pid, did) {
   }
 }
 
-function openPdfPreview(blob, filename) {
+function openPdfPreview(blob, filename, shareText = "") {
   if (lastPdf.url) { try { URL.revokeObjectURL(lastPdf.url); } catch {} }
   lastPdf = { blob, url: URL.createObjectURL(blob), name: filename };
 
@@ -952,7 +1090,11 @@ function openPdfPreview(blob, filename) {
   shareBtn.onclick = async () => {
     try {
       const file = new File([lastPdf.blob], lastPdf.name, { type: "application/pdf" });
-      await navigator.share({ files: [file], title: lastPdf.name });
+      if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+        toast("Dieses Gerät kann PDFs nicht direkt teilen – bitte „Speichern“ verwenden.", "warn", 6000);
+        return;
+      }
+      await navigator.share({ files: [file], title: lastPdf.name, text: shareText || lastPdf.name });
     } catch (e) {
       if (!e || e.name !== "AbortError") toast("Teilen nicht möglich – bitte „Öffnen“ oder „Speichern“ verwenden.", "warn");
     }

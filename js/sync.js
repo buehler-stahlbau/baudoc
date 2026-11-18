@@ -26,7 +26,7 @@ import {
   S, saveNow, allProjects, findByNumber, isActive, moveLocal,
   removeProjectLocal, normalizeProject, imagesOfDoc, imagesOfProject,
 } from "./store.js";
-import { sanitizeName, projectLabel, sleep } from "./util.js";
+import { sanitizeName, projectLabel, sleep, isoDay } from "./util.js";
 import { makeThumb } from "./images.js";
 
 const PROJECT_FILE = "baudoc.json";
@@ -356,9 +356,14 @@ async function syncProject(p, root, outbox) {
   throw new Error(`Bauvorhaben ${p.number}: gleichzeitige Änderung – wird erneut versucht`);
 }
 
+export function docFolderName(d) {
+  const dt = new Date(d.date);
+  return sanitizeName(`${isNaN(dt) ? "" : isoDay(dt) + " "}${d.title || "Dokumentation"}`);
+}
+
 async function syncDoc(p, d, retry = true) {
   if (!d.remote) d.remote = {};
-  const want = sanitizeName(d.title);
+  const want = docFolderName(d);
   try {
     if (!d.remote.folderId) {
       const f = await od.createFolder(p.remote.folderId, want, "rename");
@@ -406,6 +411,7 @@ function serialize(p) {
       title: d.title,
       date: d.date,
       updatedAt: d.updatedAt || 0,
+      protocol: d.protocol || null,
       remote: {
         folderId: d.remote?.folderId || null,
         baseName: d.remote?.baseName || null,

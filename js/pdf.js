@@ -7,8 +7,8 @@
 import * as db from "./db.js";
 import * as od from "./onedrive.js";
 import { toPdfImage } from "./images.js";
-import { formatDateDE, sanitizeName } from "./util.js";
-import { imagesOfDoc } from "./store.js";
+import { formatDateDE, sanitizeName, isoDay } from "./util.js";
+import { imagesOfDoc, CONTRACTOR_COMPANY } from "./store.js";
 
 export const PDF_MAX_BYTES = 15 * 1024 * 1024;
 const IMG_BUDGET = 13.5 * 1024 * 1024;
@@ -57,7 +57,10 @@ async function sourceBlob(img) {
 }
 
 export function pdfFilename(p, d) {
-  return `${p.number} ${sanitizeName(d.title || "Dokumentation")}.pdf`;
+  const dt = new Date(d.date);
+  const day = isNaN(dt) ? "" : isoDay(dt) + " ";
+  const kind = d.protocol && d.protocol.enabled && !/abnahme/i.test(d.title || "") ? "Abnahmeprotokoll " : "";
+  return `${p.number} ${day}${kind}${sanitizeName(d.title || "Dokumentation")}.pdf`;
 }
 
 export async function buildPdf(p, d, onProgress = () => {}) {
@@ -134,6 +137,14 @@ export async function buildPdf(p, d, onProgress = () => {}) {
   drawHeader();
 
   // ---- Kopf ----
+  const proto = d.protocol && d.protocol.enabled ? d.protocol : null;
+  if (proto) {
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(20);
+    pdf.text("Abnahmeprotokoll", margin, y);
+    pdf.setFont("helvetica", "normal");
+    y += 26;
+  }
   pdf.setFontSize(16);
   pdf.text(`BV ${p.number}${p.client ? " – " + p.client : ""}`, margin, y, { maxWidth: maxW });
   y += 18;
@@ -152,6 +163,71 @@ export async function buildPdf(p, d, onProgress = () => {}) {
   pdf.text("Datum: " + formatDateDE(d.date), margin, y);
   pdf.setTextColor(0);
   y += 16;
+
+  // Unterschrift (PNG) in einen Rahmen einpassen
+  async function drawSig(sig, x, top, boxW, boxH) {
+    if (!sig) return;
+    try {
+      const dim = await new Promise((resolve) => {
+        const im = new Image();
+        im.onload = () => resolve({ w: im.naturalWidth || 1, h: im.naturalHeight || 1 });
+        im.onerror = () => resolve({ w: 3, h: 1 });
+        im.src = sig;
+      });
+      const sc = Math.min(boxW / dim.w, boxH / dim.h);
+      const w = dim.w * sc;
+      const h = dim.h * sc;
+      pdf.addImage(sig, "PNG", x, top + (boxH - h), w, h);
+    } catch (e) { console.warn("Unterschrift nicht ins PDF", e); }
+  }
+
+  // ---- Anwesende (Abnahmeprotokoll) ----
+  const attendees = proto ? proto.attendees.filter((a) => a.name || a.company || a.sig) : [];
+  if (proto && attendees.length) {
+    const colW = [maxW * 0.33, maxW * 0.37, maxW * 0.30];
+    const rowH = 36;
+    const tableHead = () => {
+      pdf.setFontSize(9);
+      pdf.setTextColor(110);
+      pdf.text("Name", margin, y);
+      pdf.text("Firma", margin + colW[0], y);
+      pdf.text("Unterschrift", margin + colW[0] + colW[1], y);
+      pdf.setTextColor(0);
+      y += 4;
+      pdf.setDrawColor(160);
+      pdf.line(margin, y, margin + maxW, y);
+    };
+    y += 14;
+    ensureSpace(30 + rowH * Math.min(2, attendees.length));
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(12);
+    pdf.text("Anwesende", margin, y);
+    pdf.setFont("helvetica", "normal");
+    y += 16;
+    tableHead();
+    for (const a of attendees) {
+      if (y + rowH > pageHeight - margin) { newPage(); tableHead(); }
+      pdf.setFontSize(10.5);
+      const mid = y + rowH / 2 + 4;
+      pdf.text(pdf.splitTextToSize(a.name || "", colW[0] - 8).slice(0, 2), margin, mid - (a.name && pdf.splitTextToSize(a.name, colW[0] - 8).length > 1 ? 6 : 0));
+      pdf.text(pdf.splitTextToSize(a.company || "", colW[1] - 8).slice(0, 2), margin + colW[0], mid - (a.company && pdf.splitTextToSize(a.company, colW[1] - 8).length > 1 ? 6 : 0));
+      await drawSig(a.sig, margin + colW[0] + colW[1], y + 3, colW[2] - 6, rowH - 6);
+      y += rowH;
+      pdf.setDrawColor(210);
+      pdf.line(margin, y, margin + maxW, y);
+    }
+    y += 10;
+  }
+
+  if (proto && d.entries.length) {
+    y += 14;
+    ensureSpace(40);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(12);
+    pdf.text("Feststellungen", margin, y);
+    pdf.setFont("helvetica", "normal");
+    y += 2;
+  }
 
   // ---- Einträge ----
   const cols = 3;
@@ -197,6 +273,55 @@ export async function buildPdf(p, d, onProgress = () => {}) {
       }
       y += rowH + 10;
     }
+  }
+
+  // ---- Unterschriften Auftragnehmer / Auftraggeber ----
+  if (proto) {
+    const blockH = 130;
+    y += 24;
+    ensureSpace(blockH);
+    const colGap = 30;
+    const colW = (maxW - colGap) / 2;
+    const parties = [
+      { label: "Auftragnehmer", company: CONTRACTOR_COMPANY, s: proto.contractor },
+      { label: "Auftraggeber", company: p.client || "", s: proto.client },
+    ];
+    parties.forEach((pt, i) => {
+      const x = margin + i * (colW + colGap);
+      let yy = y;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(11);
+      pdf.text(pt.label, x, yy);
+      pdf.setFont("helvetica", "normal");
+      yy += 14;
+      pdf.setFontSize(10);
+      pdf.text(pdf.splitTextToSize(pt.company, colW).slice(0, 2), x, yy);
+      yy += 22;
+      pdf.setFontSize(10);
+      pdf.setTextColor(90);
+      pdf.text("Ort, Datum:", x, yy);
+      pdf.setTextColor(0);
+      if (pt.s && pt.s.sig && pt.s.sigAt) {
+        pdf.text(`${p.place ? p.place + ", " : ""}${formatDateDE(pt.s.sigAt)}`, x + 58, yy);
+      } else {
+        pdf.setDrawColor(150);
+        pdf.line(x + 58, yy + 2, x + colW, yy + 2);
+      }
+    });
+    const sigTop = y + 44;
+    const sigH = 50;
+    for (let i = 0; i < parties.length; i++) {
+      const x = margin + i * (colW + colGap);
+      const pt = parties[i];
+      if (pt.s && pt.s.sig) await drawSig(pt.s.sig, x, sigTop, colW * 0.8, sigH);
+      pdf.setDrawColor(120);
+      pdf.line(x, sigTop + sigH + 4, x + colW, sigTop + sigH + 4);
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(110);
+      pdf.text(pt.s && pt.s.name ? `Unterschrift (${pt.s.name})` : "Unterschrift, Name in Druckbuchstaben", x, sigTop + sigH + 15);
+      pdf.setTextColor(0);
+    }
+    y = sigTop + sigH + 24;
   }
 
   // ---- Seitenzahlen ----

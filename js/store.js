@@ -202,6 +202,44 @@ export function newProject(number, client, place) {
   return p;
 }
 
+/* Abnahmeprotokoll (optional je Dokumentation)
+   d.protocol = {
+     enabled,
+     attendees: [{ id, name, company, sig, sigAt }],   // Anwesende, Unterschrift direkt dahinter
+     contractor: { name, sig, sigAt },                  // Auftragnehmer (Bühler)
+     client:     { name, sig, sigAt },                  // Auftraggeber
+   }
+   sig = PNG als DataURL, sigAt = Zeitpunkt der Unterschrift */
+export const CONTRACTOR_COMPANY = "Friedrich Bühler GmbH & Co. KG";
+
+export function normalizeProtocol(d) {
+  if (!d.protocol || typeof d.protocol !== "object") return;
+  const pr = d.protocol;
+  pr.enabled = !!pr.enabled;
+  if (!Array.isArray(pr.attendees)) pr.attendees = [];
+  for (const a of pr.attendees) {
+    if (!a.id) a.id = newId();
+    a.name = String(a.name ?? "");
+    a.company = String(a.company ?? "");
+  }
+  for (const k of ["contractor", "client"]) {
+    if (!pr[k] || typeof pr[k] !== "object") pr[k] = { name: "" };
+    pr[k].name = String(pr[k].name ?? "");
+  }
+}
+
+export function newProtocol(p) {
+  return {
+    enabled: true,
+    attendees: [
+      { id: newId(), name: "", company: CONTRACTOR_COMPANY, sig: null, sigAt: null },
+      { id: newId(), name: "", company: p.client || "", sig: null, sigAt: null },
+    ],
+    contractor: { name: "", sig: null, sigAt: null },
+    client: { name: "", sig: null, sigAt: null },
+  };
+}
+
 export function normalizeProject(p) {
   p.number = String(p.number ?? p.id ?? "");
   p.title = String(p.title ?? "");
@@ -218,6 +256,7 @@ export function normalizeProject(p) {
   for (const d of p.docs || []) {
     if (!d.remote || typeof d.remote !== "object") d.remote = {};
     if (!Array.isArray(d.entries)) d.entries = [];
+    normalizeProtocol(d);
     for (const e of d.entries) {
       if (!e.id) e.id = newId();
       if (typeof e.description !== "string") e.description = String(e.description ?? "");
