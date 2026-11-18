@@ -21,6 +21,7 @@ const LEVELS = [
 ];
 
 let logoDataURL = null;
+let logoRatio = 1005 / 248; // Breite : Höhe, wird beim Laden aus der Datei gelesen
 async function ensureLogo() {
   if (logoDataURL) return logoDataURL;
   try {
@@ -32,6 +33,12 @@ async function ensureLogo() {
       r.onload = () => resolve(r.result);
       r.onerror = reject;
       r.readAsDataURL(blob);
+    });
+    await new Promise((resolve) => {
+      const im = new Image();
+      im.onload = () => { if (im.naturalWidth && im.naturalHeight) logoRatio = im.naturalWidth / im.naturalHeight; resolve(); };
+      im.onerror = resolve;
+      im.src = logoDataURL;
     });
   } catch (e) {
     console.warn("Logo konnte nicht geladen werden", e);
@@ -103,7 +110,11 @@ export async function buildPdf(p, d, onProgress = () => {}) {
     pdf.setTextColor(0);
     pdf.text(["Friedrich Bühler GmbH & Co. KG", "Daimlerstraße 7+11", "72213 Altensteig"], margin, margin);
     if (logoDataURL) {
-      try { pdf.addImage(logoDataURL, "PNG", pageWidth - margin - 150, margin - 10, 150, 50); }
+      // Logo unverzerrt in einen Rahmen von max. 160 x 45 pt einpassen, rechtsbündig
+      let lw = 160;
+      let lh = lw / logoRatio;
+      if (lh > 45) { lh = 45; lw = lh * logoRatio; }
+      try { pdf.addImage(logoDataURL, "PNG", pageWidth - margin - lw, margin - 10, lw, lh); }
       catch (e) { console.warn("Logo nicht ins PDF", e); }
     }
     pdf.setDrawColor(220);
