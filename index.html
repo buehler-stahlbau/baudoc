@@ -13,177 +13,130 @@
   <meta name="apple-mobile-web-app-title" content="BauDoc">
   <link rel="apple-touch-icon" href="icon-192.png">
 
-  <!-- jsPDF über CDN -->
-  <script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <!-- Bibliotheken liegen im Repo (funktioniert auch offline) -->
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/msal-browser.min.js"></script>
 
   <style>
     :root{
-      --brand-red: rgb(203,49,48);      /* Firmen-Rot */
-      --brand-gray: rgb(71,70,66);      /* Firmen-Grau */
-
+      --brand-red: rgb(203,49,48);
+      --brand-gray: rgb(71,70,66);
       --brand-red-dark: rgb(165,40,39);
       --brand-red-soft: rgba(203,49,48,0.12);
-
       --brand-gray-900: rgb(40,40,38);
       --brand-gray-700: rgb(71,70,66);
       --brand-gray-200: rgb(226,226,224);
       --brand-gray-100: rgb(244,244,243);
-
       --brand-primary: rgb(37,99,235);
       --brand-primary-dark: rgb(29,78,216);
+      --ok: rgb(22,128,61);
+      --warn: rgb(180,110,0);
     }
 
-    body { font-family: system-ui, sans-serif; margin:0; padding:0; background: var(--brand-gray-100); }
+    body { font-family: system-ui, sans-serif; margin:0; padding:0; background: var(--brand-gray-100); color: var(--brand-gray-900); }
     .container { max-width: 960px; margin:0 auto; padding:16px; }
+    h1 { font-size: 1.5rem; margin: 0 0 10px; }
+    h3 { margin: 6px 0 8px; }
+    hr { border: 0; border-top: 1px solid var(--brand-gray-200); margin: 14px 0; }
+    code { background: var(--brand-gray-100); padding: 1px 4px; border-radius: 3px; }
+    .center { text-align: center; }
+
     @media (max-width: 600px){
       .container { max-width: 100%; padding:12px; }
       button { padding:10px 12px; }
-      input[type="text"], textarea { font-size:16px; } /* iOS zoom vermeiden */
+      input[type="text"], input[type="search"], textarea { font-size:16px; } /* iOS-Zoom vermeiden */
     }
 
-    .topbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+    .topbar { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; flex-wrap: wrap; }
     .topbar img { height:28px; opacity:0.95; }
+    .topbar-right { display:flex; align-items:center; gap:8px; margin-left:auto; }
 
     .tabs { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-    .tab {
-      padding:6px 10px;
-      border-radius:999px;
-      border:1px solid var(--brand-gray-200);
-      background:#fff;
-      cursor:pointer;
-      color: var(--brand-gray-900);
-    }
-    .tab.active{
-      background: var(--brand-gray-700);
-      border-color: var(--brand-gray-700);
-      color:#fff;
-    }
+    .tab { padding:6px 10px; border-radius:999px; border:1px solid var(--brand-gray-200); background:#fff; cursor:pointer; color: var(--brand-gray-900); }
+    .tab.active { background: var(--brand-gray-700); border-color: var(--brand-gray-700); color:#fff; }
+
+    .sync-chip { padding:5px 10px; border-radius:999px; font-size: 0.85rem; border:1px solid var(--brand-gray-200); background:#fff; cursor:pointer; white-space: nowrap; }
+    .sync-chip.idle { color: var(--ok); border-color: rgba(22,128,61,.35); }
+    .sync-chip.pending, .sync-chip.syncing { color: var(--brand-primary); border-color: rgba(37,99,235,.35); }
+    .sync-chip.signedout { background: var(--brand-primary); color:#fff; border-color: var(--brand-primary); }
+    .sync-chip.error { color: var(--brand-red-dark); border-color: rgba(203,49,48,.4); background: var(--brand-red-soft); }
+    .sync-chip.offline, .sync-chip.off { color: #6b7280; }
 
     .card { background:#fff; border-radius:8px; padding:12px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.08); border: 1px solid var(--brand-gray-200); }
+    .card.entry { background: #fcfcfb; }
     .row { display:flex; gap:8px; align-items:center; }
     .row.wrap { flex-wrap:wrap; }
     .space-between { justify-content:space-between; }
-    .grow { flex:1; }
+    .grow { flex:1; min-width: 0; }
 
-    input[type="text"], textarea { width:100%; padding:6px 8px; border:1px solid var(--brand-gray-200); border-radius:4px; box-sizing:border-box; }
-    textarea { min-height:70px; resize:vertical; }
+    input[type="text"], input[type="search"], textarea { width:100%; padding:6px 8px; border:1px solid var(--brand-gray-200); border-radius:4px; box-sizing:border-box; font: inherit; }
+    textarea { min-height:70px; resize:vertical; margin: 4px 0; }
 
-    button{
-      padding:6px 10px;
-      border-radius:4px;
-      border: 1px solid var(--brand-gray-200);
-      background: var(--brand-gray-200);
-      cursor:pointer;
-    }
-    button:hover{ filter: brightness(0.98); }
+    .add-row { display:grid; grid-template-columns: 6.5em 1fr auto; gap:8px; margin-bottom:8px; }
+    @media (max-width: 600px){ .add-row { grid-template-columns: 6em 1fr; } .add-row button { grid-column: 1 / -1; } }
 
-    button.primary {
-      background: var(--brand-primary);
-      border-color: var(--brand-primary);
-      color:#fff;
-    }
+    .title-input { font-size:1.15rem; font-weight:bold; }
+
+    button { padding:6px 10px; border-radius:4px; border: 1px solid var(--brand-gray-200); background: var(--brand-gray-200); cursor:pointer; font: inherit; color: inherit; }
+    button:hover { filter: brightness(0.98); }
+    button:disabled { opacity: .5; cursor: default; }
+    button.primary { background: var(--brand-primary); border-color: var(--brand-primary); color:#fff; }
     button.primary:hover { background: var(--brand-primary-dark); border-color: var(--brand-primary-dark); }
-
-    button.danger {
-      background: var(--brand-red);
-      border-color: var(--brand-red);
-      color:#fff;
-    }
+    button.danger { background: var(--brand-red); border-color: var(--brand-red); color:#fff; }
     button.danger:hover { background: var(--brand-red-dark); border-color: var(--brand-red-dark); }
-
-    button.secondary {
-      background: #fff;
-      border-color: var(--brand-gray-200);
-    }
+    button.secondary { background: #fff; border-color: var(--brand-gray-200); }
     button.secondary:hover { background: var(--brand-gray-100); }
-
     button.small { padding:4px 8px; font-size:0.85rem; }
 
-    .project-item, .doc-item { cursor:pointer; padding:6px 4px; }
+    /* Datei-Auswahl als Button */
+    .file-btn { position:relative; display:inline-flex; align-items:center; gap:4px; padding:6px 10px; border-radius:4px; border:1px solid var(--brand-gray-200); background:#fff; cursor:pointer; overflow:hidden; }
+    .file-btn.small { padding:4px 8px; font-size:0.85rem; margin-top:6px; }
+    .file-btn input { position:absolute; inset:0; opacity:0; cursor:pointer; font-size: 100px; }
+    @media (max-width: 600px){ .file-btn { padding:10px 12px; } }
+
+    .section-title { margin: 0 0 8px 0; }
+    .project-item { display:flex; align-items:center; gap:10px; cursor:pointer; padding:8px 4px; border-top: 1px solid var(--brand-gray-100); }
+    .project-item:first-of-type { border-top: 0; }
+    .project-item .p-info { flex:1; min-width:0; }
     .project-item:hover, .doc-item:hover { background:#f9fafb; }
+    .doc-item { display:flex; justify-content:space-between; align-items:center; gap:8px; cursor:pointer; padding:8px 6px; border-radius:6px; }
+    .doc-item.selected { background: rgba(37,99,235,.07); outline: 1px solid rgba(37,99,235,.25); }
+    .doc-title { font-weight:700; }
+    .list-row { padding:6px 4px; }
+    .bv-num { font-variant-numeric: tabular-nums; font-weight:700; color: var(--brand-red); }
+    .bv-num.big { font-size:1.15rem; }
     .muted { color:#6b7280; font-size:0.85rem; }
+    .error-text { color: var(--brand-red-dark); }
+    .badge { font-size: 0.8rem; color: var(--brand-primary-dark); background: rgba(37,99,235,.08); border-radius:999px; padding:1px 8px; }
 
-    .images { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+    .images { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
     .image-wrapper { position:relative; display:inline-block; }
-    .images img { width:80px; height:80px; object-fit:cover; border-radius:4px; border:1px solid var(--brand-gray-200); }
-    .img-delete {
-      position: absolute;
-      top: -6px;
-      right: -6px;
-      width: 18px;
-      height: 18px;
-      background: var(--brand-red);
-      color: #fff;
-      border: 1px solid var(--brand-red-dark);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 12px;
-      line-height: 1;
-      cursor: pointer;
-    }
-    .img-delete:hover { background: var(--brand-red-dark); }
+    .images img { width:80px; height:80px; object-fit:cover; border-radius:4px; border:1px solid var(--brand-gray-200); background: var(--brand-gray-100); cursor: zoom-in; display:block; }
+    .images img.missing { opacity:.4; }
+    .img-delete { position:absolute; top:-7px; right:-7px; width:22px; height:22px; padding:0; background: var(--brand-red); color:#fff; border: 1px solid var(--brand-red-dark); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:14px; line-height:1; cursor:pointer; }
+    .img-pending { position:absolute; bottom:2px; left:2px; font-size:11px; background:rgba(255,255,255,.85); border-radius:3px; padding:0 2px; }
 
-    /* Favoriten-Stern */
-    .fav-btn{
-      width: 28px;
-      height: 28px;
-      border-radius: 999px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      line-height: 1;
-      background: #fff;
-      border: 1px solid var(--brand-gray-200);
-      cursor: pointer;
-      padding: 0;
-    }
+    .fav-btn { width:30px; height:30px; flex: 0 0 auto; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; font-size:18px; line-height:1; background:#fff; border:1px solid var(--brand-gray-200); cursor:pointer; padding:0; color: var(--brand-gray-900); }
+    .fav-btn:hover { background: var(--brand-gray-100); }
+    .fav-btn.is-fav { color:#fff; background: var(--brand-primary); border-color: var(--brand-primary); }
+    .fav-btn.is-fav:hover { background: var(--brand-primary-dark); border-color: var(--brand-primary-dark); }
 
-    /* Favoriten-Stern aktiv = blau */
-    .fav-btn.is-fav{
-      color: #fff;
-      background: var(--brand-primary);
-      border-color: var(--brand-primary);
-    }
-    .fav-btn.is-fav:hover{
-      background: var(--brand-primary-dark);
-      border-color: var(--brand-primary-dark);
-    }
-
-    .fav-btn{ color: var(--brand-gray-900); }
-    .fav-btn:hover{ background: var(--brand-gray-100); }
-
-    /* PDF Modal */
+    /* PDF-Vorschau */
     #pdfModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; }
     #pdfModal .inner { position:absolute; inset:14px; background:#fff; border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
     #pdfModal .bar { padding:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; border-bottom:1px solid #e5e7eb; }
     #pdfModal iframe { flex:1; width:100%; border:0; }
 
-    .accent{ color: var(--brand-red); }
-    .badge-soft-red{
-      background: var(--brand-red-soft);
-      color: var(--brand-red-dark);
-      border: 1px solid rgba(203,49,48,0.25);
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-    }
+    /* Bild-Großansicht */
+    #imgModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.85); z-index:9998; align-items:center; justify-content:center; }
+    #imgModal img { max-width:96vw; max-height:92vh; object-fit:contain; }
 
-    .star-btn{
-      border: none;
-      background: transparent;
-      font-size: 18px;
-      line-height: 1;
-      padding: 4px 6px;
-      cursor: pointer;
-      color: var(--brand-gray-700);
-    }
-
-    .star-btn.active{
-      color: var(--brand-primary); /* blau wie Primary */
-    }
+    /* Fortschritt + Meldungen */
+    #busy { display:none; position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background: var(--brand-gray-900); color:#fff; padding:10px 16px; border-radius:999px; z-index:10000; font-size:0.9rem; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+    #toasts { position:fixed; top:12px; left:50%; transform:translateX(-50%); z-index:10001; display:flex; flex-direction:column; gap:8px; width:min(92vw, 520px); }
+    .toast { background:#fff; border-left:4px solid var(--brand-primary); padding:10px 12px; border-radius:6px; box-shadow:0 2px 10px rgba(0,0,0,.2); font-size:0.9rem; cursor:pointer; }
+    .toast.error { border-left-color: var(--brand-red); }
+    .toast.warn { border-left-color: var(--warn); }
   </style>
 </head>
 
@@ -191,1070 +144,40 @@
   <div class="container">
     <div class="topbar">
       <div class="tabs">
-        <button id="tabProjects" class="tab">Bauvorhaben</button>
-        <button id="tabArchive" class="tab">Archiv</button>
+        <button id="tabProjects" class="tab" type="button">Bauvorhaben</button>
+        <button id="tabArchive" class="tab" type="button">Archiv</button>
+        <button id="tabSettings" class="tab" type="button" aria-label="Einstellungen">⚙</button>
       </div>
-      <img id="appLogo" src="logo.png" alt="Bühler Logo" />
+      <div class="topbar-right">
+        <button id="syncChip" class="sync-chip off" type="button">Nur lokal</button>
+        <img id="appLogo" src="logo.png" alt="Bühler Logo" />
+      </div>
     </div>
 
-    <div id="app"></div>
+    <div id="app"><p class="muted">BauDoc wird geladen …</p></div>
   </div>
 
-  <!-- PDF Preview Modal -->
+  <!-- PDF-Vorschau -->
   <div id="pdfModal">
     <div class="inner">
       <div class="bar">
-        <button id="pdfClose">Schließen</button>
-        <button id="pdfOpenTab" class="secondary">In neuem Tab öffnen</button>
-        <button id="pdfDownload" class="secondary">Speichern</button>
-        <button id="pdfShare" class="primary">Teilen</button>
+        <button id="pdfClose" type="button">Schließen</button>
+        <button id="pdfOpenTab" class="secondary" type="button">In neuem Tab öffnen</button>
+        <button id="pdfDownload" class="secondary" type="button">Speichern</button>
+        <button id="pdfShare" class="primary" type="button">Teilen</button>
       </div>
-      <iframe id="pdfFrame"></iframe>
+      <iframe id="pdfFrame" title="PDF-Vorschau"></iframe>
     </div>
   </div>
 
-  <script>
-    // Debug (falls mal wieder nur Topbar lädt)
-    window.addEventListener("error", (e) => {
-      alert("JS-Fehler: " + (e.message || "unbekannt") + "\nDatei: " + (e.filename||"") + "\nZeile: " + (e.lineno||""));
-    });
-    window.addEventListener("unhandledrejection", (e) => {
-      alert("Promise-Fehler: " + (e.reason?.message || e.reason || "unbekannt"));
-    });
+  <!-- Bild-Großansicht -->
+  <div id="imgModal"><img id="imgModalImg" alt="Bild" /></div>
 
-    /* =========================================================
-       IndexedDB Storage (statt localStorage)
-    ========================================================= */
-    const DB_NAME = "baudoc_db_v1";
-    const DB_STORE = "kv";
-    const DB_KEY = "state";
+  <div id="busy"></div>
 
-    function openDb(){
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, 1);
-        req.onupgradeneeded = () => {
-          const db = req.result;
-          if (!db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    async function idbGet(key){
-      const db = await openDb();
-      return await new Promise((resolve, reject) => {
-        const tx = db.transaction(DB_STORE, "readonly");
-        const store = tx.objectStore(DB_STORE);
-        const r = store.get(key);
-        r.onsuccess = () => resolve(r.result);
-        r.onerror = () => reject(r.error);
-      });
-    }
-
-    async function idbSet(key, val){
-      const db = await openDb();
-      return await new Promise((resolve, reject) => {
-        const tx = db.transaction(DB_STORE, "readwrite");
-        const store = tx.objectStore(DB_STORE);
-        const r = store.put(val, key);
-        r.onsuccess = () => resolve(true);
-        r.onerror = () => reject(r.error);
-      });
-    }
-
-    /* =========================================================
-       STATE
-    ========================================================= */
-    let state = {
-      projects: [],
-      archivedProjects: [],
-      selectedProjectId: null,
-      selectedDocId: null,
-      view: "projects" // "projects" | "favorites" | "archive"
-    };
-
-    function findProject(id){ return state.projects.find(p=>p.id===id)||null; }
-    function findDoc(project,id){ return project.docs.find(d=>d.id===id)||null; }
-    function escapeHtml(str){ return (str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
-
-    async function loadState(){
-      try {
-        const saved = await idbGet(DB_KEY);
-        if (saved && typeof saved === "object") {
-          if (!saved.projects) saved.projects = [];
-          if (!saved.archivedProjects) saved.archivedProjects = [];
-          if (!saved.view) saved.view = "projects";
-          state = saved;
-        }
-      } catch (e) {
-        console.warn("Konnte State nicht laden", e);
-      }
-
-      // Defensive Defaults (Favoriten-Flag nachrüsten)
-      (state.projects || []).forEach(p => { if (typeof p.fav !== "boolean") p.fav = false; });
-    }
-
-    // SOFORT speichern (wichtig für UI-Flow wie "+ Eintrag")
-    async function saveStateNow(){
-      try {
-        await idbSet(DB_KEY, state);
-        return true;
-      } catch (e) {
-        console.warn("Konnte State nicht speichern", e);
-        alert("Speichern fehlgeschlagen. Bitte Safari Speicher prüfen (Private Mode kann IndexedDB blockieren).");
-        return false;
-      }
-    }
-
-    // Debounced speichern (für Blur/kleine Änderungen)
-    let saveTimer = null;
-    function saveStateDebounced(){
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => { saveStateNow(); }, 200);
-    }
-
-    /* =========================================================
-       DATUM: TT.MM.JJJJ
-    ========================================================= */
-    function formatDateDE(dateLike){
-      const dt = (dateLike instanceof Date) ? dateLike : new Date(dateLike);
-      if (isNaN(dt.getTime())) return "";
-      const dd = String(dt.getDate()).padStart(2, "0");
-      const mm = String(dt.getMonth()+1).padStart(2, "0");
-      const yyyy = dt.getFullYear();
-      return `${dd}.${mm}.${yyyy}`;
-    }
-
-    /* =========================================================
-       Logo -> DataURL (für PDF)
-    ========================================================= */
-    let logoDataURL = null;
-
-    async function ensureLogoDataURL(){
-      if (logoDataURL) return logoDataURL;
-
-      try {
-        const resp = await fetch("logo.png", { cache: "no-store" });
-        if (!resp.ok) throw new Error("logo.png nicht gefunden");
-
-        const blob = await resp.blob();
-        logoDataURL = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve(r.result);
-          r.onerror = reject;
-          r.readAsDataURL(blob);
-        });
-
-        return logoDataURL;
-      } catch (e) {
-        console.warn("Logo konnte nicht als DataURL geladen werden", e);
-        logoDataURL = null;
-        return null;
-      }
-    }
-
-    /* =========================================================
-       EXIF-ORIENTATION FIX + Resize/Compress (JPEG)
-    ========================================================= */
-    function getExifOrientation(arrayBuffer){
-      try {
-        const view = new DataView(arrayBuffer);
-        if (view.byteLength < 12) return 1;
-        if (view.getUint16(0, false) !== 0xFFD8) return 1; // JPEG SOI
-
-        let offset = 2;
-        while (offset < view.byteLength) {
-          const marker = view.getUint16(offset, false);
-          offset += 2;
-
-          if (marker === 0xFFD9 || marker === 0xFFDA) break;
-
-          const size = view.getUint16(offset, false);
-          if (size < 2) return 1;
-
-          if (marker === 0xFFE1) { // APP1
-            const app1Start = offset + 2;
-            if (view.getUint32(app1Start, false) !== 0x45786966) return 1; // "Exif"
-
-            const tiffOffset = app1Start + 6;
-            const endian = view.getUint16(tiffOffset, false);
-            const little = endian === 0x4949;
-            if (!little && endian !== 0x4D4D) return 1;
-
-            const firstIFDOffset = view.getUint32(tiffOffset + 4, little);
-            let ifd = tiffOffset + firstIFDOffset;
-
-            const entries = view.getUint16(ifd, little);
-            ifd += 2;
-
-            for (let i = 0; i < entries; i++) {
-              const entry = ifd + i * 12;
-              const tag = view.getUint16(entry, little);
-              if (tag === 0x0112) {
-                const val = view.getUint16(entry + 8, little);
-                return val || 1;
-              }
-            }
-            return 1;
-          }
-
-          offset += size; // size enthält die 2 length-bytes
-        }
-      } catch {}
-      return 1;
-    }
-
-    function isJpegByHeader(arrayBuffer){
-      try {
-        const v = new DataView(arrayBuffer);
-        return v.byteLength >= 2 && v.getUint16(0, false) === 0xFFD8;
-      } catch { return false; }
-    }
-
-    // ✅ Funktioniert (du hattest sie ja schon erfolgreich)
-    async function fileToCorrectedDataURL(file){
-      // 1) ArrayBuffer fürs EXIF lesen
-      const buf = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = e => resolve(e.target.result);
-        r.onerror = reject;
-        r.readAsArrayBuffer(file);
-      });
-
-      // 2) DataURL fürs Decoding
-      const dataURL = await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = e => resolve(e.target.result);
-        r.onerror = reject;
-        r.readAsDataURL(file);
-      });
-
-      if (!isJpegByHeader(buf)) return dataURL;
-
-      const orientation = getExifOrientation(buf) || 1;
-
-      // 3) Bild decoden (Image-Element ist auf iOS am zuverlässigsten)
-      const img = await new Promise((resolve, reject) => {
-        const im = new Image();
-        im.onload = () => resolve(im);
-        im.onerror = reject;
-        im.src = dataURL;
-      });
-
-      const srcW = img.naturalWidth || img.width || 1;
-      const srcH = img.naturalHeight || img.height || 1;
-
-      // 4) Resize (macht PDF massiv kleiner)
-      const MAX_W = 1600;
-      const MAX_H = 1600;
-      const ratio = Math.min(MAX_W / srcW, MAX_H / srcH, 1);
-
-      const drawW = Math.round(srcW * ratio);
-      const drawH = Math.round(srcH * ratio);
-
-      // 5) Canvas-Größe korrekt setzen
-      const rotate90 = [5,6,7,8].includes(orientation);
-      const canvas = document.createElement("canvas");
-      canvas.width  = rotate90 ? drawH : drawW;
-      canvas.height = rotate90 ? drawW : drawH;
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return dataURL;
-
-      ctx.setTransform(1,0,0,1,0,0);
-
-      // 6) EXIF-Orientation korrekt einbacken (auf drawW/drawH!)
-      switch (orientation) {
-        case 2:
-          ctx.translate(drawW, 0); ctx.scale(-1, 1);
-          break;
-        case 3:
-          ctx.translate(drawW, drawH); ctx.rotate(Math.PI);
-          break;
-        case 4:
-          ctx.translate(0, drawH); ctx.scale(1, -1);
-          break;
-        case 5:
-          ctx.rotate(0.5 * Math.PI);
-          ctx.scale(1, -1);
-          break;
-        case 6:
-          ctx.rotate(0.5 * Math.PI);
-          ctx.translate(0, -drawH);
-          break;
-        case 7:
-          ctx.rotate(0.5 * Math.PI);
-          ctx.translate(drawW, -drawH);
-          ctx.scale(-1, 1);
-          break;
-        case 8:
-          ctx.rotate(-0.5 * Math.PI);
-          ctx.translate(-drawW, 0);
-          break;
-      }
-
-      // 7) Zeichnen in Zielgröße
-      ctx.drawImage(img, 0, 0, drawW, drawH);
-
-      // 8) JPEG raus – Qualität runter => PDF kleiner
-      return canvas.toDataURL("image/jpeg", 0.65);
-    }
-
-    async function filesToCorrectedDataURLs(files){
-      const out = [];
-      for (const f of files) {
-        try { out.push(await fileToCorrectedDataURL(f)); }
-        catch(e){ console.warn("Bild konnte nicht gelesen werden", e); }
-      }
-      return out;
-    }
-
-    /* =========================================================
-       PDF Preview Helpers
-    ========================================================= */
-    let lastPdfBlob = null;
-    let lastPdfFilename = "dokumentation.pdf";
-    let lastPdfUrl = null;
-
-    function openPdfPreview(blob, filename){
-      lastPdfBlob = blob;
-      lastPdfFilename = filename || "dokumentation.pdf";
-
-      if (lastPdfUrl) { try { URL.revokeObjectURL(lastPdfUrl); } catch {} }
-      lastPdfUrl = URL.createObjectURL(blob);
-
-      const modal = document.getElementById("pdfModal");
-      const frame = document.getElementById("pdfFrame");
-      frame.src = lastPdfUrl;
-      modal.style.display = "block";
-
-      document.getElementById("pdfClose").onclick = () => {
-        modal.style.display = "none";
-        frame.src = "about:blank";
-      };
-
-      document.getElementById("pdfOpenTab").onclick = () => {
-        window.open(lastPdfUrl, "_blank");
-      };
-
-      document.getElementById("pdfDownload").onclick = () => {
-        const a = document.createElement("a");
-        a.href = lastPdfUrl;
-        a.download = lastPdfFilename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      };
-
-      document.getElementById("pdfShare").onclick = async () => {
-        try {
-          if (!navigator.share) {
-            alert("Teilen wird von deinem Browser nicht direkt unterstützt. Nutze „In neuem Tab öffnen“ und dann das Share-Symbol im PDF-Viewer.");
-            return;
-          }
-          const file = new File([lastPdfBlob], lastPdfFilename, { type: "application/pdf" });
-          await navigator.share({ files: [file], title: lastPdfFilename, text: "PDF Export aus BauDoc" });
-        } catch (e) {
-          console.warn("Share abgebrochen/fehlgeschlagen", e);
-        }
-      };
-    }
-
-    /* =========================================================
-       UI TABS
-    ========================================================= */
-    function updateTabs(){
-      const pBtn = document.getElementById("tabProjects");
-      const aBtn = document.getElementById("tabArchive");
-
-      pBtn.classList.toggle("active", state.view === "projects");
-      aBtn.classList.toggle("active", state.view === "archive");
-
-      pBtn.textContent = `Bauvorhaben (${state.projects.length})`;
-      aBtn.textContent = `Archiv (${state.archivedProjects.length})`;
-
-      pBtn.onclick = () => {
-        state.view = "projects";
-        state.selectedProjectId = null;
-        state.selectedDocId = null;
-        saveStateDebounced();
-        render();
-      };
-
-      aBtn.onclick = () => {
-        state.view = "archive";
-        state.selectedProjectId = null;
-        state.selectedDocId = null;
-        saveStateDebounced();
-        render();
-      };
-    }
-
-    /* =========================================================
-       RENDER
-    ========================================================= */
-    function render(){
-      updateTabs();
-      const app = document.getElementById("app");
-      app.innerHTML = "";
-
-      if (state.view === "archive") {
-        renderArchive(app);
-        return;
-      }
-
-      if (state.view === "favorites") {
-        renderProjectList(app, { onlyFavorites: true });
-        return;
-      }
-
-      const project = state.selectedProjectId ? findProject(state.selectedProjectId) : null;
-      const doc = project && state.selectedDocId ? findDoc(project, state.selectedDocId) : null;
-
-      if (!project) renderProjectList(app, { onlyFavorites: false });
-      else renderProjectDetail(app, project, doc);
-    }
-
-    function renderArchive(container){
-      const head = document.createElement("div");
-      head.className = "card";
-      head.innerHTML = `
-        <h1>Archiv – Bauvorhaben</h1>
-        <p class="muted">Wiederherstellen oder endgültig löschen.</p>
-      `;
-      container.appendChild(head);
-
-      const list = document.createElement("div");
-      list.className = "card";
-
-      if (!state.archivedProjects.length) {
-        list.innerHTML = `<p class="muted">Archiv ist leer.</p>`;
-        container.appendChild(list);
-        return;
-      }
-
-      state.archivedProjects.slice().sort((a,b)=>a.name.localeCompare(b.name)).forEach(p=>{
-        const row = document.createElement("div");
-        row.className = "row space-between wrap";
-        row.style.padding = "6px 4px";
-        row.innerHTML = `
-          <div>
-            <strong>${escapeHtml(p.name)}</strong>
-            <div class="muted">${(p.docs||[]).length} Dokumentation(en)</div>
-          </div>
-          <div class="row">
-            <button class="small" data-a="restore" type="button">Wiederherstellen</button>
-            <button class="danger small" data-a="delete" type="button">Endgültig löschen</button>
-          </div>
-        `;
-
-        row.querySelector('[data-a="restore"]').onclick = () => {
-          state.archivedProjects = state.archivedProjects.filter(x=>x.id!==p.id);
-          state.projects.push(p);
-          // fav default
-          (state.projects || []).forEach(pp => { if (typeof pp.fav !== "boolean") pp.fav = false; });
-          saveStateDebounced();
-          render();
-        };
-
-        row.querySelector('[data-a="delete"]').onclick = () => {
-          if (!confirm(`Bauvorhaben „${p.name}“ endgültig löschen?\n\nAchtung: Alles wird gelöscht.`)) return;
-          state.archivedProjects = state.archivedProjects.filter(x=>x.id!==p.id);
-          saveStateDebounced();
-          render();
-        };
-
-        list.appendChild(row);
-      });
-
-      container.appendChild(list);
-    }
-
-    function renderProjectList(container){
-      const wrap = document.createElement("div");
-
-      // ---------- Header (immer: Bauvorhaben + Add-Feld) ----------
-      const header = document.createElement("div");
-      header.className = "card";
-      header.innerHTML = `
-        <h1>Bauvorhaben</h1>
-        <div class="row wrap">
-          <div class="grow">
-            <input
-              id="newProjectName"
-              type="text"
-              placeholder="Neues Bauvorhaben (nur 5-stellige Nummer)"
-              inputmode="numeric"
-              minlength="5"
-              maxlength="5"
-            />
-          </div>
-          <button class="primary" id="addP" type="button">+ Hinzufügen</button>
-        </div>
-      `;
-      wrap.appendChild(header);
-
-      // ---------- Helfer: Star-Button ----------
-      function makeStarButton(project){
-        if (typeof project.fav !== "boolean") project.fav = false;
-
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "fav-btn " + (project.fav ? "is-fav" : "");
-        b.dataset.a = "fav";
-        b.setAttribute("aria-label", "Favorit umschalten");
-        b.textContent = project.fav ? "★" : "☆";
-
-        b.onclick = (e) => {
-          e.stopPropagation();
-          project.fav = !project.fav;
-          saveStateDebounced();
-          render();
-        };
-
-        return b;
-      }
-
-      // ---------- Helfer: Projekt-Zeile ----------
-      function makeProjectRow(project){
-        const row = document.createElement("div");
-        row.className = "row space-between project-item wrap";
-
-        const left = document.createElement("div");
-        left.className = "row";
-        left.style.gap = "10px";
-        left.style.alignItems = "center";
-
-        const star = makeStarButton(project);
-
-        const info = document.createElement("div");
-        info.innerHTML = `
-          <strong>${escapeHtml(project.name)}</strong>
-          <span class="muted"> (${(project.docs||[]).length})</span>
-        `;
-
-        left.appendChild(star);
-        left.appendChild(info);
-
-        const right = document.createElement("div");
-        right.className = "row";
-
-        const archiveBtn = document.createElement("button");
-        archiveBtn.type = "button";
-        archiveBtn.className = "small secondary";
-        archiveBtn.dataset.a = "archive";
-        archiveBtn.textContent = "Archivieren";
-        archiveBtn.onclick = (e) => {
-          e.stopPropagation();
-          if (!confirm(`Bauvorhaben „${project.name}“ ins Archiv verschieben?`)) return;
-          state.projects = (state.projects || []).filter(x => x.id !== project.id);
-          state.archivedProjects = state.archivedProjects || [];
-          state.archivedProjects.push(project);
-          saveStateDebounced();
-          render();
-        };
-
-        right.appendChild(archiveBtn);
-
-        row.appendChild(left);
-        row.appendChild(right);
-
-        row.onclick = (e) => {
-          // falls irgendein Button geklickt wurde, nix öffnen
-          if (e.target && e.target.dataset && e.target.dataset.a) return;
-          state.view = "projects";
-          state.selectedProjectId = project.id;
-          state.selectedDocId = null;
-          saveStateDebounced();
-          render();
-        };
-
-        return row;
-      }
-
-      // ---------- Projekte trennen: Favoriten / Sonstige ----------
-      const projects = (state.projects || []).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name)));
-      const favProjects = projects.filter(p => !!p.fav);
-      const otherProjects = projects.filter(p => !p.fav);
-
-      // ---------- Favoriten-Block (oben) ----------
-      if (favProjects.length > 0) {
-        const favCard = document.createElement("div");
-        favCard.className = "card";
-        favCard.innerHTML = `
-          <h3 style="margin:0 0 8px 0;">Favoriten</h3>
-          <p class="muted" style="margin:0 0 10px 0;">Projekte mit Stern werden hier oben angezeigt.</p>
-        `;
-
-        favProjects.forEach(p => favCard.appendChild(makeProjectRow(p)));
-        wrap.appendChild(favCard);
-      }
-
-      // ---------- Alle Bauvorhaben (ohne Favoriten) ----------
-      const list = document.createElement("div");
-      list.className = "card";
-
-      if (projects.length === 0) {
-        list.innerHTML = `<p class="muted">Noch keine Bauvorhaben.</p>`;
-      } else if (otherProjects.length === 0) {
-        list.innerHTML = `<p class="muted">Alle Bauvorhaben sind Favoriten.</p>`;
-      } else {
-        otherProjects.forEach(p => list.appendChild(makeProjectRow(p)));
-      }
-
-      wrap.appendChild(list);
-      container.appendChild(wrap);
-
-      // ---------- Hinzufügen (5-stellig, keine Doppelbelegung, auch nicht im Archiv) ----------
-      document.getElementById("addP").onclick = () => {
-        const input = document.getElementById("newProjectName");
-        const raw = (input.value || "").trim();
-
-        if (!/^\d{5}$/.test(raw)) {
-          alert("Bitte eine 5-stellige Bauvorhaben-Nummer eingeben (nur Ziffern).");
-          input.focus();
-          return;
-        }
-
-        const exists =
-          (state.projects || []).some(p => String(p.name) === raw || String(p.id) === raw) ||
-          (state.archivedProjects || []).some(p => String(p.name) === raw || String(p.id) === raw);
-
-        if (exists) {
-          alert(`Bauvorhaben ${raw} existiert bereits.`);
-          input.focus();
-          return;
-        }
-
-        // Nummer als ID + Name
-        state.projects = state.projects || [];
-        state.projects.push({ id: raw, name: raw, docs: [], fav: false });
-
-        input.value = "";
-        saveStateDebounced();
-        render();
-      };
-    }
-
-    function renderProjectDetail(container, project, doc){
-      const head = document.createElement("div");
-      head.className = "card";
-      head.innerHTML = `
-        <div class="row space-between wrap">
-          <div class="row" style="flex:1;">
-            <button id="back" type="button">←</button>
-            <input id="projNameEdit" type="text" value="${escapeHtml(project.name)}"
-              style="font-size:1.2rem;font-weight:bold;border:1px solid #ccc;padding:4px;" />
-          </div>
-          <button class="primary small" id="newD" type="button">+ Neue Dokumentation</button>
-        </div>`;
-      container.appendChild(head);
-
-      const projInput = document.getElementById("projNameEdit");
-      projInput.addEventListener("blur", () => {
-        const val = projInput.value.trim();
-        if (val && val !== project.name) {
-          project.name = val;
-          saveStateDebounced();
-          render();
-        }
-      });
-
-      document.getElementById("back").onclick = () => {
-        state.selectedProjectId = null;
-        state.selectedDocId = null;
-        saveStateDebounced();
-        render();
-      };
-
-      document.getElementById("newD").onclick = () => {
-        const now = new Date();
-        const n = {
-          id: Date.now().toString(),
-          title: formatDateDE(now) + " neue Dokumentation",
-          date: now.toISOString(),
-          entries: []
-        };
-        project.docs.push(n);
-        state.selectedDocId = n.id;
-        saveStateDebounced();
-        render();
-      };
-
-      const list = document.createElement("div");
-      list.className = "card";
-      if ((project.docs||[]).length === 0) list.innerHTML = `<p class="muted">Noch keine Dokumentationen.</p>`;
-
-      (project.docs||[]).slice().sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(d=>{
-        const r = document.createElement("div");
-        r.className = "row space-between doc-item";
-        r.innerHTML = `
-          <div>
-            <div style="font-weight:700;">${escapeHtml(d.title)}</div>
-            <div class="muted">${formatDateDE(d.date)}</div>
-          </div>
-          <div class="row">
-            <button class="small" data-id="${d.id}" data-a="print" type="button">PDF</button>
-            <button class="danger small" data-id="${d.id}" data-a="del" type="button">X</button>
-          </div>
-        `;
-
-        r.onclick = e => {
-          if (e.target.dataset && e.target.dataset.a) return;
-          state.selectedDocId = d.id;
-          saveStateDebounced();
-          render();
-        };
-        list.appendChild(r);
-      });
-      container.appendChild(list);
-
-      list.querySelectorAll("button[data-id]").forEach(b => {
-        b.onclick = e => {
-          e.stopPropagation();
-          const id = b.dataset.id;
-          const action = b.dataset.a;
-          if (action === "del") {
-            if (!confirm("Dokumentation wirklich löschen?")) return;
-            project.docs = (project.docs||[]).filter(x => x.id !== id);
-            if (state.selectedDocId === id) state.selectedDocId = null;
-            saveStateDebounced();
-            render();
-          }
-          if (action === "print") generatePDF(project.id, id);
-        };
-      });
-
-      if (doc) {
-        const card = document.createElement("div");
-        card.className = "card";
-        card.innerHTML = `
-          <h3>Dokumentation bearbeiten</h3>
-          <input id="docTitle" type="text" value="${escapeHtml(doc.title)}" />
-          <hr />
-          <h3>Neuer Eintrag</h3>
-          <textarea id="eText" placeholder="Beschreibung"></textarea>
-
-          <div class="row wrap">
-            <div class="grow">
-              <input id="eImg" type="file" multiple accept="image/*" />
-              <div class="muted">Bilder hinzufügen (Mediathek / Kamera / Dateien)</div>
-            </div>
-          </div>
-
-          <button type="button" class="primary" id="addE">+ Eintrag</button>
-          <hr />
-          <h3>Einträge</h3>
-          <div id="elist"></div>
-        `;
-        container.appendChild(card);
-
-        const docTitleInput = document.getElementById("docTitle");
-        docTitleInput.addEventListener("blur", () => {
-          const val = docTitleInput.value.trim();
-          if (val && val !== doc.title) {
-            doc.title = val;
-            saveStateDebounced();
-            render();
-          }
-        });
-
-        document.getElementById("addE").onclick = async () => {
-          await addEntry(project.id, doc.id);
-        };
-
-        renderEntriesList(document.getElementById("elist"), project, doc);
-      }
-    }
-
-    function renderEntriesList(el, project, doc){
-      el.innerHTML = "";
-      if (!doc.entries || doc.entries.length === 0) {
-        el.innerHTML = `<p class="muted">Keine Einträge.</p>`;
-        return;
-      }
-
-      doc.entries.forEach((en, i) => {
-        const c = document.createElement("div");
-        c.className = "card";
-        c.innerHTML = `
-          <div class="row space-between wrap">
-            <div style="flex:1;">
-              <label class="muted">Eintrag ${i+1}</label>
-              <textarea class="entryText" data-entry-index="${i}">${escapeHtml(en.description)}</textarea>
-              <div class="images">
-                ${(en.images||[]).map((img,idx)=>`
-                  <div class="image-wrapper">
-                    <img src="${img}" alt="Bild" />
-                    <button class="img-delete" data-entry-index="${i}" data-img-index="${idx}" type="button">×</button>
-                  </div>`).join("")}
-              </div>
-
-              <div class="row wrap" style="margin-top:6px;">
-                <div class="grow">
-                  <input type="file" class="entryImg" data-entry-index="${i}" multiple accept="image/*" />
-                  <div class="muted">Bilder hinzufügen</div>
-                </div>
-              </div>
-            </div>
-            <div>
-              <button class="danger small" data-entry-del="${i}" type="button">Eintrag löschen</button>
-            </div>
-          </div>
-        `;
-        el.appendChild(c);
-      });
-
-      el.querySelectorAll(".entryText").forEach(textarea => {
-        textarea.addEventListener("blur", () => {
-          const idx = parseInt(textarea.getAttribute("data-entry-index"), 10);
-          const val = textarea.value.trim();
-          if (!doc.entries[idx]) return;
-          doc.entries[idx].description = val;
-          saveStateDebounced();
-        });
-      });
-
-      el.querySelectorAll(".img-delete").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const eIdx = parseInt(btn.getAttribute("data-entry-index"), 10);
-          const iIdx = parseInt(btn.getAttribute("data-img-index"), 10);
-          if (!doc.entries[eIdx]) return;
-          doc.entries[eIdx].images.splice(iIdx, 1);
-          saveStateDebounced();
-          render();
-        });
-      });
-
-      el.querySelectorAll(".entryImg").forEach(input => {
-        input.addEventListener("change", async () => {
-          const idx = parseInt(input.getAttribute("data-entry-index"), 10);
-          const files = Array.from(input.files || []);
-          if (!files.length || !doc.entries[idx]) return;
-
-          const images = await filesToCorrectedDataURLs(files);
-          doc.entries[idx].images = (doc.entries[idx].images || []).concat(images);
-
-          input.value = "";
-          saveStateDebounced();
-          render();
-        });
-      });
-
-      el.querySelectorAll("button[data-entry-del]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const idx = parseInt(btn.getAttribute("data-entry-del"), 10);
-          doc.entries.splice(idx, 1);
-          saveStateDebounced();
-          render();
-        });
-      });
-    }
-
-    async function addEntry(pid, did){
-      const p = findProject(pid);
-      const d = p ? findDoc(p, did) : null;
-      if (!d) return;
-
-      const tEl = document.getElementById("eText");
-      const fEl = document.getElementById("eImg");
-
-      const text = (tEl ? tEl.value : "").trim();
-      const files = Array.from((fEl && fEl.files) ? fEl.files : []);
-      if (!text && files.length === 0) return;
-
-      const newEntry = { description: text, images: [] };
-      if (files.length > 0) newEntry.images = await filesToCorrectedDataURLs(files);
-
-      d.entries = Array.isArray(d.entries) ? d.entries : [];
-      d.entries.push(newEntry);
-
-      if (tEl) tEl.value = "";
-      if (fEl) fEl.value = "";
-
-      state.selectedProjectId = pid;
-      state.selectedDocId = did;
-
-      await saveStateNow();
-      render();
-    }
-
-    /* =========================================================
-       PDF EXPORT
-       - Anschrift links + Logo rechts
-       - Bilder immer 3 Spalten breit, proportional (kein Drehen)
-       - Seitenzahlen: "Seite x von y" unten rechts
-    ========================================================= */
-    async function generatePDF(pid, did){
-      if (!window.jspdf || !window.jspdf.jsPDF) {
-        alert("PDF-Export ist nicht verfügbar (jsPDF konnte nicht geladen werden).");
-        return;
-      }
-      const { jsPDF } = window.jspdf;
-      const p = findProject(pid);
-      const d = p ? findDoc(p, did) : null;
-      if (!d) return;
-
-      await ensureLogoDataURL();
-
-      const pdf = new jsPDF({ unit: "pt", format: "a4" });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 40;
-      const maxContentWidth = pageWidth - 2 * margin;
-
-      function drawHeader(){
-        pdf.setFontSize(10);
-        pdf.text([
-          "Friedrich Bühler GmbH & Co. KG",
-          "Daimlerstraße 7+11",
-          "72213 Altensteig"
-        ], margin, margin);
-
-        if (logoDataURL) {
-          try {
-            const logoW = 150;
-            const logoH = 50;
-            pdf.addImage(logoDataURL, "PNG", pageWidth - margin - logoW, margin - 10, logoW, logoH);
-          } catch (e) {
-            console.warn("Logo konnte nicht in PDF", e);
-          }
-        }
-
-        pdf.setDrawColor(220);
-        pdf.line(margin, margin + 55, pageWidth - margin, margin + 55);
-      }
-
-      let y = margin + 75;
-      drawHeader();
-
-      pdf.setFontSize(16);
-      pdf.text(p.name || "Bauvorhaben", margin, y);
-      y += 24;
-
-      pdf.setFontSize(13);
-      pdf.text(d.title || "Dokumentation", margin, y);
-      y += 14;
-
-      pdf.setFontSize(11);
-      pdf.setTextColor(90);
-      pdf.text("Datum: " + formatDateDE(d.date), margin, y);
-      pdf.setTextColor(0);
-      y += 20;
-
-      function newPage(){
-        pdf.addPage();
-        drawHeader();
-        y = margin + 75;
-      }
-      function ensureSpace(h){
-        if (y + h > pageHeight - margin) newPage();
-      }
-
-      const cols = 3;
-      const gap = 10;
-      const slotW = Math.floor((maxContentWidth - gap * (cols - 1)) / cols);
-
-      for (let idx = 0; idx < (d.entries || []).length; idx++){
-        y += 12; // Leerzeile vor dem Eintrag
-
-        const en = d.entries[idx] || {};
-        const desc = en.description || "";
-
-        pdf.setFontSize(12);
-        const textLines = pdf.splitTextToSize(`${idx+1}. ${desc}`, maxContentWidth);
-        const textH = 16 + (textLines.length - 1) * 12;
-
-        const imgs = Array.isArray(en.images) ? en.images : [];
-        let infos = [];
-        if (imgs.length) {
-          infos = await Promise.all(imgs.map(src => new Promise(res => {
-            const im = new Image();
-            im.onload = () => res({ src, w: im.naturalWidth || 1, h: im.naturalHeight || 1 });
-            im.onerror = () => res({ src, w: 1, h: 1 });
-            im.src = src;
-          })));
-        }
-
-        // Platz für Text + erste Reihe
-        let firstRowH = 0;
-        if (infos.length) {
-          const row = infos.slice(0, cols);
-          firstRowH = row.reduce((mx, it) => {
-            const hh = slotW * (it.h / it.w);
-            return Math.max(mx, hh);
-          }, 0);
-        }
-        const minBlockH = infos.length ? (textH + 6 + firstRowH + 10) : (textH + 10);
-        ensureSpace(minBlockH);
-
-        pdf.text(textLines, margin, y);
-        y += textH + 1; // näher an Bilder
-
-        if (infos.length) {
-          let i = 0;
-          while (i < infos.length) {
-            const row = infos.slice(i, i + cols);
-
-            let rowH = 0;
-            const dims = row.map(it => {
-              const hh = slotW * (it.h / it.w);  // proportional
-              rowH = Math.max(rowH, hh);
-              return { w: slotW, h: hh };
-            });
-
-            ensureSpace(rowH + 10);
-
-            let x = margin;
-            for (let j = 0; j < row.length; j++) {
-              const it = row[j];
-              const { w, h } = dims[j];
-              try {
-                const fmt = (typeof it.src === "string" && it.src.startsWith("data:image/png")) ? "PNG" : "JPEG";
-                pdf.addImage(it.src, fmt, x, y, w, h);
-              } catch(e) {
-                console.warn("Bild nicht in PDF", e);
-              }
-              x += slotW + gap;
-            }
-
-            y += rowH + 14;
-            i += row.length;
-          }
-          y += 6;
-        } else {
-          y += 8;
-        }
-      }
-
-      // Seitenzahlen
-      const totalPages = pdf.getNumberOfPages();
-      for (let pno = 1; pno <= totalPages; pno++) {
-        pdf.setPage(pno);
-        pdf.setFontSize(9);
-        pdf.setTextColor(90);
-        pdf.text(`Seite ${pno} von ${totalPages}`, pageWidth - margin, pageHeight - 20, { align: "right" });
-        pdf.setTextColor(0);
-      }
-
-      const blob = pdf.output("blob");
-      const filename = (d.title || "dokumentation") + ".pdf";
-      openPdfPreview(blob, filename);
-    }
-
-    /* =========================================================
-       START
-    ========================================================= */
-    (async function init(){
-      await loadState();
-      render();
-      saveStateDebounced();
-    })();
+  <script type="module" src="js/app.js"></script>
+  <script nomodule>
+    document.getElementById("app").innerHTML = "<p>Dieser Browser ist zu alt für BauDoc. Bitte Safari/Chrome aktualisieren.</p>";
   </script>
 </body>
 </html>
-
-
-

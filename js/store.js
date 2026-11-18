@@ -1,0 +1,246 @@
+/* =========================================================
+   App-Zustand
+   Projekt (Bauvorhaben):
+   {
+     id, number: "12345", title: "Neubau Lagerhalle",
+     fav,                  // Favorit = komplett auf diesem Gerät
+     docs: [...] | null,   // null = nur Name bekannt, Inhalt liegt online
+     deletedDocs: [{id, at}],   // gelöschte Dokus (für Abgleich mehrerer Geräte)
+     pendingDeletes: [itemId],  // OneDrive-Dateien/Ordner, die noch gelöscht werden müssen
+     moveTo: "archive" | "active" | null,
+     remote: { folderId, baseName, etag },
+     updatedAt, rev, dirty
+   }
+   Doku:    { id, title, date, updatedAt, remote: {folderId, baseName, bilderId}, entries: [...] }
+   Eintrag: { id, description, images: [{ id, rid? }] }   // rid = OneDrive-Datei-ID
+========================================================= */
+import * as db from "./db.js";
+import { newId, toast } from "./util.js";
+import { dataUrlToBlob, makeThumb } from "./images.js";
+
+function defaultState() {
+  return {
+    version: 2,
+    projects: [],
+    archivedProjects: [],
+    view: "projects", // "projects" | "archive" | "settings"
+    selectedProjectId: null,
+    selectedDocId: null,
+    remote: { rootId: null, pendingFolderDeletes: [] },
+  };
+}
+
+export const S = { state: defaultState() };
+
+/* ---------- Änderungs-Benachrichtigung ---------- */
+const listeners = new Set();
+export function onChange(fn) { listeners.add(fn); }
+function emit(kind) {
+  listeners.forEach((fn) => { try { fn(kind); } catch (e) { console.error(e); } });
+}
+
+/* ---------- Laden / Speichern ---------- */
+export async function load() {
+  let saved = null;
+  try {
+    saved = await db.kvGet("state");
+  } catch (e) {
+    console.warn("Konnte Zustand nicht laden", e);
+    toast("Gespeicherte Daten konnten nicht geladen werden (Privater Modus?)", "error", 8000);
+  }
+
+  if (saved && typeof saved === "object") {
+    let migrated = false;
+    if (!saved.version || saved.version < 2) {
+      saved = await migrateV1(saved);
+      migrated = true;
+    }
+    const def = defaultState();
+    S.state = Object.assign(def, saved);
+    S.state.remote = Object.assign(defaultState().remote, saved.remote || {});
+    if (!["projects", "archive", "settings"].includes(S.state.view)) S.state.view = "projects";
+    allProjects().forEach(normalizeProject);
+    if (migrated) await saveNow();
+  }
+}
+
+let saveTimer = null;
+let saveErrorShown = false;
+
+export async function saveNow() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  try {
+    await db.kvSet("state", S.state);
+    saveErrorShown = false;
+    return true;
+  } catch (e) {
+    console.warn("Konnte Zustand nicht speichern", e);
+    if (!saveErrorShown) {
+      saveErrorShown = true;
+      toast("Speichern fehlgeschlagen! Speicher voll oder Privater Modus?", "error", 10000);
+    }
+    return false;
+  }
+}
+
+export function saveSoon() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveNow, 200);
+}
+
+export function hasPendingSave() { return saveTimer !== null; }
+
+/* ---------- Änderungen markieren ---------- */
+export function touchProject(p) {
+  p.updatedAt = Date.now();
+  p.rev = (p.rev || 0) + 1;
+  p.dirty = true;
+  saveSoon();
+  emit("data");
+}
+
+export function touchDoc(p, d) {
+  d.updatedAt = Date.now();
+  p.rev = (p.rev || 0) + 1;
+  p.dirty = true;
+  saveSoon();
+  emit("data");
+}
+
+/* ---------- Zugriff ---------- */
+export function allProjects() {
+  return [...S.state.projects, ...S.state.archivedProjects];
+}
+export function findProject(id) {
+  return S.state.projects.find((p) => p.id === id) || null;
+}
+export function findByNumber(num) {
+  return allProjects().find((p) => p.number === num) || null;
+}
+export function isActive(p) {
+  return S.state.projects.includes(p);
+}
+export function moveLocal(p, loc) {
+  const st = S.state;
+  st.projects = st.projects.filter((x) => x !== p);
+  st.archivedProjects = st.archivedProjects.filter((x) => x !== p);
+  (loc === "archive" ? st.archivedProjects : st.projects).push(p);
+  if (loc === "archive" && st.selectedProjectId === p.id) {
+    st.selectedProjectId = null;
+    st.selectedDocId = null;
+  }
+}
+
+export function imagesOfDoc(d) {
+  const out = [];
+  for (const e of d.entries || []) for (const i of e.images || []) out.push(i);
+  return out;
+}
+export function imagesOfProject(p) {
+  const out = [];
+  for (const d of p.docs || []) out.push(...imagesOfDoc(d));
+  return out;
+}
+
+export async function removeProjectLocal(p) {
+  const st = S.state;
+  st.projects = st.projects.filter((x) => x !== p);
+  st.archivedProjects = st.archivedProjects.filter((x) => x !== p);
+  if (st.selectedProjectId === p.id) {
+    st.selectedProjectId = null;
+    st.selectedDocId = null;
+  }
+  for (const img of imagesOfProject(p)) {
+    try { await db.imgDelete(img.id); } catch {}
+  }
+}
+
+export function newProject(number, title) {
+  return {
+    id: number, number, title, fav: true,
+    docs: [], deletedDocs: [], pendingDeletes: [], moveTo: null,
+    remote: {}, updatedAt: Date.now(), rev: 1, dirty: true,
+  };
+}
+
+export function normalizeProject(p) {
+  p.number = String(p.number ?? p.id ?? "");
+  p.title = String(p.title ?? "");
+  p.fav = !!p.fav;
+  if (!Array.isArray(p.deletedDocs)) p.deletedDocs = [];
+  if (!Array.isArray(p.pendingDeletes)) p.pendingDeletes = [];
+  if (!p.remote || typeof p.remote !== "object") p.remote = {};
+  if (p.docs !== null && !Array.isArray(p.docs)) p.docs = [];
+  for (const d of p.docs || []) {
+    if (!d.remote || typeof d.remote !== "object") d.remote = {};
+    if (!Array.isArray(d.entries)) d.entries = [];
+    for (const e of d.entries) {
+      if (!e.id) e.id = newId();
+      if (typeof e.description !== "string") e.description = String(e.description ?? "");
+      if (!Array.isArray(e.images)) e.images = [];
+    }
+  }
+}
+
+/* ---------- Umstellung alter Daten (Version 1) ----------
+   v1: Projekt { id, name, docs, fav }, Bilder als DataURL im Eintrag.
+   Vorher wird eine Sicherheitskopie unter "state_v1_backup" abgelegt.
+--------------------------------------------------------- */
+async function migrateV1(old) {
+  try { await db.kvSet("state_v1_backup", old); } catch (e) { console.warn(e); }
+
+  const usedIds = new Set();
+  const convert = async (p) => {
+    const name = String(p.name ?? p.id ?? "").trim();
+    const m = name.match(/^(\d{5})\s*[-–]?\s*(.*)$/);
+    const idIsNumber = /^\d{5}$/.test(String(p.id));
+    const number = m ? m[1] : idIsNumber ? String(p.id) : "00000";
+    const title = m ? m[2].trim() : name;
+    let id = number;
+    if (usedIds.has(id) || number === "00000") id = newId();
+    usedIds.add(id);
+
+    const docs = [];
+    for (const d of p.docs || []) {
+      const entries = [];
+      for (const en of d.entries || []) {
+        const imgs = [];
+        for (const src of en.images || []) {
+          if (typeof src !== "string" || !src.startsWith("data:")) continue;
+          try {
+            const blob = dataUrlToBlob(src);
+            const imgId = newId();
+            let thumb = null;
+            try { thumb = await makeThumb(blob); } catch {}
+            await db.imgPut({ id: imgId, archive: blob, thumb });
+            imgs.push({ id: imgId });
+          } catch (e) {
+            console.warn("Bild konnte nicht übernommen werden", e);
+          }
+        }
+        entries.push({ id: newId(), description: en.description || "", images: imgs });
+      }
+      docs.push({
+        id: String(d.id || newId()),
+        title: d.title || "Dokumentation",
+        date: d.date || new Date().toISOString(),
+        updatedAt: Date.parse(d.date) || Date.now(),
+        entries,
+        remote: {},
+      });
+    }
+    return {
+      id, number, title, fav: !!p.fav,
+      docs, deletedDocs: [], pendingDeletes: [], moveTo: null,
+      remote: {}, updatedAt: Date.now(), rev: 1, dirty: true,
+    };
+  };
+
+  const projects = [];
+  for (const p of old.projects || []) projects.push(await convert(p));
+  const archivedProjects = [];
+  for (const p of old.archivedProjects || []) archivedProjects.push(await convert(p));
+
+  return { ...defaultState(), projects, archivedProjects };
+}
