@@ -47,7 +47,7 @@ function hasUnuploaded(p) {
 }
 
 function countPending() {
-  let n = outboxCount + (S.state.remote.pendingFolderDeletes || []).length;
+  let n = outboxCount + (S.state.remote.pendingFolderDeletes || []).length + (S.state.prefs.dirty ? 1 : 0);
   for (const p of allProjects()) {
     if (p.dirty || p.moveTo) n++;
     n += (p.pendingDeletes || []).length;
@@ -153,13 +153,14 @@ async function syncAll(full) {
   }
 
   if (full) await refreshListing(root);
+  if (full || S.state.prefs.dirty) await syncPrefs(root);
 
   const outbox = await db.outboxAll();
   const sel = st.selectedProjectId;
   const targets = allProjects().filter((p) =>
     p.dirty || p.moveTo || p.pendingDeletes.length || hasUnuploaded(p) ||
     outbox.some((o) => o.projectId === p.id) ||
-    (p.id === sel && (full || p.docs === null)) ||
+    p.id === sel || // geöffnetes Bauvorhaben immer aktuell halten (1 kleine Abfrage)
     (full && p.fav && isActive(p))
   );
 
@@ -175,6 +176,40 @@ async function syncAll(full) {
   }
   outboxCount = (await db.outboxAll()).length;
   if (firstError) throw firstError;
+}
+
+/* Favoriten je Nutzer: BauDoc/_Nutzer/<anmeldename>.json */
+async function syncPrefs(root) {
+  const acc = od.getAccount();
+  if (!acc) return;
+  const pr = S.state.prefs;
+  const folder = await od.ensureFolder(root.id, CONFIG.usersFolder);
+  const name = sanitizeName(String(acc.username || acc.homeAccountId || "nutzer").toLowerCase()) + ".json";
+  const remote = await od.getJson(folder.id, name);
+  const remoteAt = (remote && remote.data && remote.data.favUpdatedAt) || 0;
+
+  if (remote && remoteAt > (pr.favUpdatedAt || 0)) {
+    const favs = new Set(remote.data.favorites || []);
+    for (const p of allProjects()) {
+      const was = p.fav;
+      p.fav = favs.has(p.number);
+      if (was && !p.fav) { try { await freeLocal(p); } catch (e) { console.warn(e); } }
+    }
+    pr.favUpdatedAt = remoteAt;
+    pr.dirty = false;
+    return;
+  }
+  if (!remote || pr.dirty) {
+    const rev = pr.rev;
+    if (!pr.favUpdatedAt) pr.favUpdatedAt = Date.now();
+    await od.putJson(folder.id, name, {
+      format: "baudoc-user",
+      user: acc.username || "",
+      favorites: allProjects().filter((p) => p.fav).map((p) => p.number).sort(),
+      favUpdatedAt: pr.favUpdatedAt,
+    }, null);
+    if (pr.rev === rev) pr.dirty = false;
+  }
 }
 
 async function ensureArchive(root) {
@@ -212,6 +247,7 @@ async function refreshListing(root) {
         remote: { folderId: f.item.id, baseName: f.item.name, etag: null },
         updatedAt: 0, rev: 0, dirty: false,
       };
+      normalizeProject(p);
       (f.loc === "archive" ? st.archivedProjects : st.projects).push(p);
       continue;
     }
@@ -221,7 +257,7 @@ async function refreshListing(root) {
     }
     if (p.remote.baseName !== f.item.name && !p.dirty) {
       p.remote.baseName = f.item.name;
-      if (p.docs === null) p.title = f.title;
+      if (p.docs === null) { p.title = f.title; delete p.client; delete p.place; normalizeProject(p); }
     }
     const loc = isActive(p) ? "active" : "archive";
     if (!p.moveTo && loc !== f.loc) moveLocal(p, f.loc);
@@ -361,6 +397,8 @@ function serialize(p) {
     version: 2,
     number: p.number,
     title: p.title,
+    client: p.client || "",
+    place: p.place || "",
     updatedAt: p.updatedAt || 0,
     deletedDocs: p.deletedDocs || [],
     docs: (p.docs || []).map((d) => ({
@@ -391,8 +429,15 @@ function cleanDoc(d) {
   return c;
 }
 
+function adoptTitle(p, r) {
+  if (!r.title) return;
+  p.title = r.title;
+  if (typeof r.client === "string") { p.client = r.client; p.place = r.place || ""; }
+  else { delete p.client; delete p.place; } // wird aus title abgeleitet
+}
+
 function adoptRemote(p, r) {
-  if (r.title) p.title = r.title;
+  adoptTitle(p, r);
   p.updatedAt = r.updatedAt || 0;
   p.deletedDocs = r.deletedDocs || [];
   p.docs = (r.docs || []).map(cleanDoc);
@@ -402,7 +447,7 @@ function adoptRemote(p, r) {
 // Zusammenführen auf Ebene der Dokumentationen: neuere Version gewinnt
 async function mergeRemote(p, r) {
   if ((r.updatedAt || 0) > (p.updatedAt || 0)) {
-    if (r.title) p.title = r.title;
+    adoptTitle(p, r);
     p.updatedAt = r.updatedAt;
   }
 

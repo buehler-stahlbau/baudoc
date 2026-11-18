@@ -1,7 +1,10 @@
 # BauDoc
 
-Baustellendokumentation als Web-App (PWA) – läuft im Browser und auf dem Handy,
-auch offline. Optional werden alle Daten mit OneDrive abgeglichen.
+Baustellendokumentation als App (Home-Bildschirm auf iPhone/Android) und als
+Browser-Anwendung am PC – auch offline. Mit Microsoft-Anmeldung werden die Daten
+über OneDrive abgeglichen, je Nutzer auf allen seinen Geräten.
+
+Bauvorhaben (BV) = 5-stellige Nummer + Bauherr/Auftraggeber + Bauort.
 
 ## Aufbau
 
@@ -23,15 +26,17 @@ vendor/               jsPDF 2.5.1, MSAL Browser 2.39.0
 
 ```
 BauDoc/
-  12345 Neubau Lagerhalle/
+  12345 Müller GmbH, Altensteig/
     baudoc.json                      Texte + Struktur
     18.11.2026 Rohbau/
       12345 18.11.2026 Rohbau.pdf
       Bilder/                        Fotos, je max. 1 MB
   _Archiv/                           archivierte Bauvorhaben
+  _Nutzer/                           je Nutzer: seine Favoriten
 ```
 
-- **Favoriten** (★) werden komplett auf dem Gerät gehalten, inkl. Fotos.
+- **Favoriten** (★) gehören zum Nutzer (auf all seinen Geräten gleich) und werden
+  komplett auf dem Gerät gehalten, inkl. Fotos.
 - **Andere Bauvorhaben** erscheinen nur in der Liste. Der Inhalt wird beim Öffnen
   geladen, Fotos nur als Vorschau.
 - Fotos: 1 MB in OneDrive, im PDF stärker komprimiert (PDF max. 15 MB).

@@ -71,6 +71,7 @@ export function toast(msg, kind = "info", ms = 4500) {
   t.textContent = msg;
   t.onclick = () => t.remove();
   box.appendChild(t);
+  while (box.children.length > 3) box.firstElementChild.remove();
   setTimeout(() => t.remove(), ms);
 }
 

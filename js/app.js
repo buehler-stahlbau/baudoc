@@ -1,5 +1,6 @@
 /* =========================================================
    BauDoc – Oberfläche
+   Läuft als App (Home-Bildschirm) und im Browser.
 ========================================================= */
 import { CONFIG, APP_VERSION } from "./config.js";
 import * as db from "./db.js";
@@ -8,7 +9,7 @@ import * as sync from "./sync.js";
 import {
   S, load, saveNow, saveSoon, touchProject, touchDoc, onChange,
   findProject, findByNumber, newProject, moveLocal, removeProjectLocal,
-  allProjects, imagesOfDoc, imagesOfProject,
+  allProjects, imagesOfDoc, imagesOfProject, favoritesChanged, resetLocal, setTitleParts,
 } from "./store.js";
 import { processFile, makeThumb } from "./images.js";
 import { buildPdf, PDF_MAX_BYTES } from "./pdf.js";
@@ -24,14 +25,20 @@ function el(html) {
   return t.content.firstElementChild;
 }
 
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isTouch = window.matchMedia("(pointer: coarse)").matches;
+const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
 /* ---------- Flüchtige UI-Daten (nicht gespeichert) ---------- */
 const drafts = {};      // docId -> Text "Neuer Eintrag"
 const draftImgs = {};   // docId -> [imageId] für "Neuer Eintrag"
 let filterText = "";
+let addOpen = false;
 let pendingRender = false;
+let deferredInstall = null;
 const loadingProjects = new Set();
 
-/* ---------- Status-Overlay ---------- */
+/* ---------- Fortschritt ---------- */
 function setBusy(msg) {
   const b = $("#busy");
   if (!msg) { b.style.display = "none"; return; }
@@ -48,18 +55,42 @@ window.addEventListener("unhandledrejection", (e) => {
   toast("Fehler: " + ((r && r.message) || r || "unbekannt"), "error", 8000);
 });
 
-/* ---------- Kontext ---------- */
+/* =========================================================
+   Navigation (mit Zurück-Taste von Handy und Browser)
+========================================================= */
+function navState() {
+  const st = S.state;
+  return { view: st.view, pid: st.selectedProjectId, did: st.selectedDocId };
+}
+
+function go(changes, { replace = false, scroll = true } = {}) {
+  const opening = changes.selectedProjectId && changes.selectedProjectId !== S.state.selectedProjectId;
+  Object.assign(S.state, changes);
+  if (opening) sync.schedule(100); // beim Öffnen neuesten Stand holen
+  saveSoon();
+  try {
+    if (replace) history.replaceState(navState(), "");
+    else history.pushState(navState(), "");
+  } catch {}
+  render();
+  if (scroll) window.scrollTo(0, 0);
+}
+
+window.addEventListener("popstate", (e) => {
+  const s = e.state;
+  if (!s) return;
+  S.state.view = s.view || "projects";
+  S.state.selectedProjectId = s.pid || null;
+  S.state.selectedDocId = s.did || null;
+  saveSoon();
+  render();
+});
+
 function ctx() {
   const st = S.state;
   const p = st.selectedProjectId ? findProject(st.selectedProjectId) : null;
   const d = p && p.docs && st.selectedDocId ? p.docs.find((x) => x.id === st.selectedDocId) || null : null;
   return { p, d };
-}
-
-function go(changes) {
-  Object.assign(S.state, changes);
-  saveSoon();
-  render();
 }
 
 /* =========================================================
@@ -107,9 +138,22 @@ function hydrateThumbs(root) {
 function thumbHtml(img, deletable = true) {
   return `
     <div class="image-wrapper">
-      <img data-img-id="${h(img.id)}" data-rid="${h(img.rid || "")}" alt="Bild" />
+      <img data-img-id="${h(img.id)}" data-rid="${h(img.rid || "")}" alt="Foto" />
       ${img.rid || !od.isConfigured() ? "" : `<span class="img-pending" title="Noch nicht hochgeladen">⏳</span>`}
-      ${deletable ? `<button class="img-delete" data-del-img="${h(img.id)}" type="button" aria-label="Bild löschen">×</button>` : ""}
+      ${deletable ? `<button class="img-delete" data-del-img="${h(img.id)}" type="button" aria-label="Foto löschen">×</button>` : ""}
+    </div>`;
+}
+
+// Foto-Knöpfe: Kamera (direkt) + Mediathek/Dateien
+function photoButtons(cls, small = false) {
+  return `
+    <div class="photo-btns">
+      <label class="file-btn camera-only ${small ? "small" : ""}">📷 Kamera
+        <input class="${cls}" type="file" accept="image/*" capture="environment" />
+      </label>
+      <label class="file-btn ${small ? "small" : ""}">🖼 ${isTouch ? "Fotos" : "Fotos hinzufügen"}
+        <input class="${cls}" type="file" accept="image/*" multiple />
+      </label>
     </div>`;
 }
 
@@ -119,7 +163,8 @@ async function openViewer(id, rid) {
   const im = $("#imgModalImg");
   im.src = (await thumbUrl(id, rid)) || "";
   modal.style.display = "flex";
-  modal.onclick = () => { modal.style.display = "none"; im.src = ""; };
+  const close = () => { modal.style.display = "none"; im.src = ""; };
+  modal.onclick = close;
   try {
     const rec = await db.imgGet(id);
     let blob = rec && rec.archive;
@@ -135,7 +180,7 @@ async function openViewer(id, rid) {
 /* =========================================================
    Render
 ========================================================= */
-// Nicht neu zeichnen, während jemand tippt – sonst geht der Fokus/Tipp verloren
+// Nicht neu zeichnen, während jemand im Inhalt tippt
 function requestRender() {
   const a = document.activeElement;
   if (a && a.closest && a.closest("#app") && (a.tagName === "TEXTAREA" || (a.tagName === "INPUT" && a.type !== "file"))) {
@@ -154,16 +199,16 @@ document.addEventListener("focusout", () => {
 });
 
 // Nach bewusster Aktion (z. B. Fotos gewählt): sofort neu zeichnen.
-// Eingetippte Texte sind bereits gespeichert (input-Event), es geht nichts verloren.
+// Eingetippte Texte sind bereits gespeichert, es geht nichts verloren.
 function renderNow() {
   const a = document.activeElement;
-  if (a && a.blur && a !== document.body) a.blur();
+  if (a && a.blur && a !== document.body && !a.closest(".appbar")) a.blur();
   render();
 }
 
 function render() {
   pendingRender = false;
-  updateTopbar();
+  updateHeader();
   const app = $("#app");
   app.innerHTML = "";
   const st = S.state;
@@ -172,27 +217,70 @@ function render() {
   else if (st.view === "settings") renderSettings(app);
   else {
     const { p, d } = ctx();
-    if (!p) renderProjectList(app);
-    else renderProjectDetail(app, p, d);
+    if (p) renderProjectDetail(app, p, d);
+    else renderProjectList(app, st.view === "favorites");
   }
   hydrateThumbs(app);
 }
 
-/* ---------- Kopfzeile ---------- */
-function updateTopbar() {
+/* =========================================================
+   Kopfzeile: BV · Fav · Archiv · Einstellungen · Logo + Suche
+========================================================= */
+function updateHeader() {
   const st = S.state;
-  const pBtn = $("#tabProjects");
-  const aBtn = $("#tabArchive");
-  const sBtn = $("#tabSettings");
-  pBtn.classList.toggle("active", st.view === "projects");
-  aBtn.classList.toggle("active", st.view === "archive");
-  sBtn.classList.toggle("active", st.view === "settings");
-  pBtn.textContent = `Bauvorhaben (${st.projects.length})`;
-  aBtn.textContent = `Archiv (${st.archivedProjects.length})`;
-  pBtn.onclick = () => go({ view: "projects", selectedProjectId: null, selectedDocId: null });
-  aBtn.onclick = () => go({ view: "archive", selectedProjectId: null, selectedDocId: null });
-  sBtn.onclick = () => go({ view: "settings" });
+  const tabs = {
+    tabProjects: "projects",
+    tabFav: "favorites",
+    tabArchive: "archive",
+    tabSettings: "settings",
+  };
+  for (const [id, view] of Object.entries(tabs)) {
+    const b = $("#" + id);
+    b.classList.toggle("active", st.view === view);
+    b.onclick = () => {
+      if (st.view === view && !st.selectedProjectId) { window.scrollTo(0, 0); return; }
+      go({ view, selectedProjectId: null, selectedDocId: null });
+    };
+  }
+  $("#cntProjects").textContent = st.projects.length;
+  $("#cntFav").textContent = st.projects.filter((p) => p.fav).length;
+  $("#cntArchive").textContent = st.archivedProjects.length;
+
+  const search = $("#search");
+  search.placeholder = st.view === "archive" ? "Archiv durchsuchen …" : "Suchen: Nr., Bauherr, Ort …";
+  if (search.value !== filterText) search.value = filterText;
   updateSyncChip();
+}
+
+function setupSearch() {
+  const search = $("#search");
+  search.addEventListener("input", () => {
+    filterText = search.value;
+    const st = S.state;
+    if (!filterText.trim()) {
+      if (!st.selectedProjectId && st.view !== "settings") render();
+    } else if (st.view === "settings" || st.selectedProjectId) {
+      go({ view: st.view === "settings" ? "projects" : st.view, selectedProjectId: null, selectedDocId: null }, { replace: true });
+    } else {
+      render();
+    }
+  });
+  search.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      // Genau ein Treffer -> direkt öffnen
+      const hits = $$("#app .project-item[data-pid]");
+      if (hits.length === 1) hits[0].click();
+      else search.blur();
+    }
+    if (e.key === "Escape") { search.value = ""; filterText = ""; render(); }
+  });
+}
+
+function matches(p) {
+  const q = filterText.trim().toLowerCase();
+  if (!q) return true;
+  const hay = (p.number + " " + p.title).toLowerCase();
+  return q.split(/\s+/).every((w) => hay.includes(w));
 }
 
 function updateSyncChip() {
@@ -201,137 +289,159 @@ function updateSyncChip() {
   const s = sync.status;
   const texts = {
     off: "Nur lokal",
-    signedout: "☁ Anmelden",
-    syncing: "⟳ Synchronisiere …",
-    idle: "✓ OneDrive",
-    pending: `⏳ ${s.pending} ausstehend`,
-    offline: s.pending ? `Offline · ${s.pending} ausstehend` : "Offline",
-    error: "⚠ Sync-Fehler",
+    signedout: "Anmelden",
+    syncing: "⟳ Sync …",
+    idle: "✓ Synchron",
+    pending: `⏳ ${s.pending}`,
+    offline: s.pending ? `Offline · ${s.pending}` : "Offline",
+    error: "⚠ Fehler",
+  };
+  const titles = {
+    off: "Daten liegen nur auf diesem Gerät",
+    signedout: "Mit Microsoft anmelden, um mit OneDrive abzugleichen",
+    syncing: "Abgleich mit OneDrive läuft",
+    idle: "Alles mit OneDrive abgeglichen",
+    pending: `${s.pending} Änderung(en) warten auf Upload – tippen zum Abgleichen`,
+    offline: "Keine Internetverbindung – Änderungen werden später hochgeladen",
+    error: s.message,
   };
   chip.textContent = texts[s.kind] || s.kind;
   chip.className = "sync-chip " + s.kind;
-  chip.title = s.message || "";
+  chip.title = titles[s.kind] || "";
   chip.onclick = () => {
     if (s.kind === "signedout") { od.login(); return; }
     if (s.kind === "error") { toast(s.message || "Unbekannter Fehler", "error", 8000); sync.run({ full: true }); return; }
     if (s.kind === "pending" || s.kind === "idle") { sync.run({ full: true }); return; }
-    go({ view: "settings" });
+    go({ view: "settings", selectedProjectId: null, selectedDocId: null });
   };
 }
 
 /* =========================================================
-   Bauvorhaben-Liste
+   Listen: Bauvorhaben / Favoriten
 ========================================================= */
-function renderProjectList(app) {
+function renderProjectList(app, onlyFav) {
   const st = S.state;
+  const sorted = st.projects.slice().sort((a, b) => a.number.localeCompare(b.number) || a.title.localeCompare(b.title));
+  const base = onlyFav ? sorted.filter((p) => p.fav) : sorted;
+  const shown = base.filter(matches);
 
   const head = el(`
-    <div class="card">
-      <h1>Bauvorhaben</h1>
-      <div class="add-row">
-        <input id="newNum" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="Nr." autocomplete="off" />
-        <input id="newTitle" type="text" placeholder="Bezeichnung, z. B. Neubau Lagerhalle" autocomplete="off" />
-        <button class="primary" id="addP" type="button">+ Hinzufügen</button>
-      </div>
-      <input id="filter" type="search" placeholder="Suchen (Nummer oder Bezeichnung) …" value="${h(filterText)}" />
+    <div class="page-head">
+      <h1>${onlyFav ? "Favoriten" : "Bauvorhaben"}</h1>
+      ${onlyFav ? "" : `<button class="${addOpen ? "secondary" : "primary"}" id="toggleAdd" type="button">${addOpen ? "Abbrechen" : "+ Neu"}</button>`}
     </div>`);
   app.appendChild(head);
 
-  const sorted = st.projects.slice().sort((a, b) => a.number.localeCompare(b.number) || a.title.localeCompare(b.title));
-  const favs = sorted.filter((p) => p.fav);
-  const others = sorted.filter((p) => !p.fav);
-
-  if (favs.length) {
-    const c = el(`<div class="card"><h3 class="section-title">Favoriten <span class="muted">· komplett auf diesem Gerät</span></h3></div>`);
-    favs.forEach((p) => c.appendChild(projectRow(p)));
-    app.appendChild(c);
+  if (!onlyFav && addOpen) {
+    const form = el(`
+      <div class="card add-card">
+        <label class="field-label" for="newNum">Neues Bauvorhaben</label>
+        <div class="add-row">
+          <input id="newNum" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="BV-Nr." autocomplete="off" enterkeyhint="next" />
+          <input id="newClient" type="text" placeholder="Bauherr / Auftraggeber" autocomplete="off" enterkeyhint="next" />
+          <input id="newPlace" type="text" placeholder="Bauort" autocomplete="off" enterkeyhint="done" />
+        </div>
+        <button class="primary block" id="addP" type="button">Bauvorhaben anlegen</button>
+      </div>`);
+    app.appendChild(form);
+    const numEl = $("#newNum");
+    numEl.addEventListener("input", () => {
+      numEl.value = numEl.value.replace(/\D/g, "").slice(0, 5);
+      if (numEl.value.length === 5) $("#newClient").focus();
+    });
+    $("#addP").onclick = () => addProject();
+    $("#newClient").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#newPlace").focus(); });
+    $("#newPlace").addEventListener("keydown", (e) => { if (e.key === "Enter") addProject(); });
+    setTimeout(() => numEl.focus(), 50);
   }
+  const t = $("#toggleAdd");
+  if (t) t.onclick = () => { addOpen = !addOpen; render(); };
 
-  const list = el(`<div class="card"><h3 class="section-title">${favs.length ? "Weitere Bauvorhaben" : "Alle Bauvorhaben"}</h3></div>`);
-  if (!sorted.length) list.appendChild(el(`<p class="muted">Noch keine Bauvorhaben.</p>`));
-  else if (!others.length) list.appendChild(el(`<p class="muted">Alle Bauvorhaben sind Favoriten.</p>`));
-  else others.forEach((p) => list.appendChild(projectRow(p)));
+  const list = el(`<div class="card list-card"></div>`);
+  if (filterText.trim()) {
+    list.appendChild(el(`<div class="muted list-info">${shown.length} Treffer für „${h(filterText.trim())}“</div>`));
+  }
+  if (!base.length) {
+    list.appendChild(el(onlyFav
+      ? `<div class="empty"><div class="empty-icon">☆</div><p><strong>Noch keine Favoriten.</strong></p>
+         <p class="muted">Markiere deine eigenen Bauvorhaben mit dem Stern. Favoriten werden komplett auf dem Gerät gespeichert – auch die Fotos – und sind offline verfügbar.</p></div>`
+      : `<div class="empty"><div class="empty-icon">▦</div><p><strong>Noch keine Bauvorhaben.</strong></p>
+         <p class="muted">Lege mit „+ Neu“ das erste Bauvorhaben an.</p></div>`));
+  } else if (!shown.length) {
+    list.appendChild(el(`<p class="muted">Keine Treffer.</p>`));
+  }
+  shown.forEach((p) => list.appendChild(projectRow(p)));
   app.appendChild(list);
-
-  const applyFilter = () => {
-    const q = filterText.trim().toLowerCase();
-    $$(".project-item", app).forEach((r) => { r.style.display = !q || r.dataset.search.includes(q) ? "" : "none"; });
-  };
-  $("#filter").addEventListener("input", (e) => { filterText = e.target.value; applyFilter(); });
-  applyFilter();
-
-  const numEl = $("#newNum");
-  numEl.addEventListener("input", () => { numEl.value = numEl.value.replace(/\D/g, "").slice(0, 5); });
-  $("#addP").onclick = () => addProject();
-  $("#newTitle").addEventListener("keydown", (e) => { if (e.key === "Enter") addProject(); });
 }
 
 function projectRow(p) {
-  const meta = p.docs === null
-    ? `<span class="badge">☁ online</span>`
-    : `<span class="muted">${p.docs.length} Dokumentation${p.docs.length === 1 ? "" : "en"}</span>`;
+  let meta;
+  if (p.docs === null) meta = `<span class="badge">☁ in OneDrive</span>`;
+  else {
+    const n = p.docs.length;
+    const last = p.docs.reduce((mx, d) => Math.max(mx, Date.parse(d.date) || 0), 0);
+    meta = `<span class="muted">${n} Dokumentation${n === 1 ? "" : "en"}${last ? " · zuletzt " + formatDateDE(last) : ""}</span>`;
+  }
   const pend = p.dirty && od.isConfigured() ? ` <span class="muted" title="Noch nicht hochgeladen">⏳</span>` : "";
   const row = el(`
-    <div class="project-item" data-search="${h((p.number + " " + p.title).toLowerCase())}">
+    <div class="project-item" data-pid="${h(p.id)}">
       <button class="fav-btn ${p.fav ? "is-fav" : ""}" type="button" data-a="fav" aria-label="Favorit umschalten">${p.fav ? "★" : "☆"}</button>
       <div class="p-info">
-        <div><span class="bv-num">${h(p.number)}</span> <strong>${h(p.title)}</strong></div>
+        <div class="p-title"><span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}</div>
+        ${p.place ? `<div class="p-place">${h(p.place)}</div>` : ""}
         <div>${meta}${pend}</div>
       </div>
-      <button class="small secondary" type="button" data-a="archive">Archivieren</button>
+      <span class="chevron" aria-hidden="true">›</span>
     </div>`);
   row.onclick = (e) => {
     const a = e.target.closest("[data-a]");
-    if (a) {
-      e.stopPropagation();
-      if (a.dataset.a === "fav") toggleFav(p);
-      else archiveProject(p);
-      return;
-    }
-    go({ view: "projects", selectedProjectId: p.id, selectedDocId: null });
+    if (a) { e.stopPropagation(); toggleFav(p); return; }
+    go({ selectedProjectId: p.id, selectedDocId: null });
   };
   return row;
 }
 
 function addProject() {
   const num = $("#newNum").value.trim();
-  const title = $("#newTitle").value.trim().replace(/\s+/g, " ");
+  const client = $("#newClient").value.trim();
+  const place = $("#newPlace").value.trim();
   if (!/^\d{5}$/.test(num)) {
-    alert("Bitte eine 5-stellige Bauvorhaben-Nummer eingeben (nur Ziffern).");
+    toast("Bitte eine 5-stellige Bauvorhaben-Nummer eingeben (nur Ziffern).", "warn");
     $("#newNum").focus();
     return;
   }
-  if (!title) {
-    alert("Bitte eine Bezeichnung für das Bauvorhaben eingeben.");
-    $("#newTitle").focus();
+  if (!client) {
+    toast("Bitte Bauherr / Auftraggeber eingeben.", "warn");
+    $("#newClient").focus();
+    return;
+  }
+  if (!place) {
+    toast("Bitte den Bauort eingeben.", "warn");
+    $("#newPlace").focus();
     return;
   }
   const ex = findByNumber(num);
   if (ex) {
     const where = S.state.archivedProjects.includes(ex) ? " (im Archiv)" : "";
-    alert(`Bauvorhaben ${num} existiert bereits${where}:\n${ex.number} ${ex.title}`);
+    toast(`Bauvorhaben ${num} existiert bereits${where}: ${ex.number} ${ex.title}`, "warn", 6000);
     return;
   }
-  const p = newProject(num, title);
+  const p = newProject(num, client, place);
   S.state.projects.push(p);
   touchProject(p);
-  render();
+  favoritesChanged();
+  addOpen = false;
+  go({ selectedProjectId: p.id, selectedDocId: null });
 }
 
 function toggleFav(p) {
   p.fav = !p.fav;
-  saveSoon();
+  favoritesChanged();
   render();
+  toast(p.fav ? `${p.number} ist jetzt Favorit – wird auf diesem Gerät gespeichert.` : `${p.number} ist kein Favorit mehr.`, "info", 2500);
+  sync.refreshStatus();
   if (p.fav) sync.schedule(300, { full: true });
-  else sync.freeLocal(p).catch((e) => console.warn(e));
-}
-
-function archiveProject(p) {
-  if (!confirm(`Bauvorhaben „${p.number} ${p.title}“ ins Archiv verschieben?`)) return;
-  moveLocal(p, "archive");
-  if (p.remote.folderId) p.moveTo = "archive";
-  touchProject(p);
-  render();
+  else { sync.freeLocal(p).catch((e) => console.warn(e)); sync.schedule(1500); }
 }
 
 /* =========================================================
@@ -339,32 +449,35 @@ function archiveProject(p) {
 ========================================================= */
 function renderArchive(app) {
   app.appendChild(el(`
-    <div class="card">
+    <div class="page-head">
       <h1>Archiv</h1>
-      <p class="muted">Wiederherstellen oder endgültig löschen.${od.isConfigured() ? " In OneDrive liegen archivierte Bauvorhaben im Ordner „BauDoc/_Archiv“." : ""}</p>
     </div>`));
-
-  const list = el(`<div class="card"></div>`);
-  const arch = S.state.archivedProjects.slice().sort((a, b) => a.number.localeCompare(b.number));
-  if (!arch.length) list.appendChild(el(`<p class="muted">Archiv ist leer.</p>`));
+  const list = el(`<div class="card list-card"></div>`);
+  const all = S.state.archivedProjects.slice().sort((a, b) => a.number.localeCompare(b.number));
+  const arch = all.filter(matches);
+  if (!all.length) {
+    list.appendChild(el(`<div class="empty"><div class="empty-icon">🗄</div><p><strong>Archiv ist leer.</strong></p>
+      <p class="muted">Abgeschlossene Bauvorhaben kannst du im Bauvorhaben über „Archivieren“ hierher verschieben.</p></div>`));
+  } else if (!arch.length) list.appendChild(el(`<p class="muted">Keine Treffer.</p>`));
 
   arch.forEach((p) => {
-    const count = p.docs === null ? "☁ online" : `${p.docs.length} Dokumentation(en)`;
+    const count = p.docs === null ? "☁ in OneDrive" : `${p.docs.length} Dokumentation(en)`;
     const row = el(`
-      <div class="row space-between wrap list-row">
-        <div>
-          <span class="bv-num">${h(p.number)}</span> <strong>${h(p.title)}</strong>
-          <div class="muted">${count}</div>
+      <div class="archive-item">
+        <div class="p-info">
+          <div class="p-title"><span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}</div>
+          <div class="muted">${p.place ? h(p.place) + " · " : ""}${count}</div>
         </div>
         <div class="row">
-          <button class="small" data-a="restore" type="button">Wiederherstellen</button>
-          <button class="danger small" data-a="delete" type="button">Endgültig löschen</button>
+          <button class="secondary small" data-a="restore" type="button">Wiederherstellen</button>
+          <button class="danger-outline small" data-a="delete" type="button">Löschen</button>
         </div>
       </div>`);
     $('[data-a="restore"]', row).onclick = () => {
       moveLocal(p, "active");
       if (p.remote.folderId) p.moveTo = "active";
       touchProject(p);
+      toast(`${p.number} wiederhergestellt.`, "info", 2500);
       render();
     };
     $('[data-a="delete"]', row).onclick = async () => {
@@ -383,41 +496,71 @@ function renderArchive(app) {
 
 /* =========================================================
    Bauvorhaben – Detail
+   Handy: untereinander · Breiter Bildschirm: Liste links, Bearbeiten rechts
 ========================================================= */
 function renderProjectDetail(app, p, d) {
+  const wrap = el(`<div class="detail ${d ? "has-doc" : ""}"><div class="detail-main"></div><div class="detail-side"></div></div>`);
+  app.appendChild(wrap);
+  const main = $(".detail-main", wrap);
+  const side = $(".detail-side", wrap);
+
   const head = el(`
     <div class="card">
       <div class="row">
-        <button id="back" type="button" aria-label="Zurück">←</button>
-        <span class="bv-num big">${h(p.number)}</span>
-        <input id="projTitle" class="grow title-input" type="text" value="${h(p.title)}" placeholder="Bezeichnung" />
+        <button id="back" class="icon-btn" type="button" aria-label="Zurück">←</button>
+        <span class="bv-num big grow">BV ${h(p.number)}</span>
         <button class="fav-btn ${p.fav ? "is-fav" : ""}" id="favD" type="button" aria-label="Favorit umschalten">${p.fav ? "★" : "☆"}</button>
       </div>
-      <div class="row" style="margin-top:10px;">
-        <button class="primary small" id="newD" type="button">+ Neue Dokumentation</button>
+      <div class="bv-fields">
+        <div>
+          <label class="field-label" for="projClient">Bauherr / Auftraggeber</label>
+          <input id="projClient" class="title-input" type="text" value="${h(p.client)}" enterkeyhint="next" />
+        </div>
+        <div>
+          <label class="field-label" for="projPlace">Bauort</label>
+          <input id="projPlace" type="text" value="${h(p.place)}" enterkeyhint="done" />
+        </div>
+      </div>
+      <div class="row wrap actions">
+        <button class="primary" id="newD" type="button">+ Neue Dokumentation</button>
+        <button class="secondary" id="archP" type="button">Archivieren</button>
       </div>
     </div>`);
-  app.appendChild(head);
+  main.appendChild(head);
 
   $("#back").onclick = () => go({ selectedProjectId: null, selectedDocId: null });
   $("#favD").onclick = () => toggleFav(p);
+  $("#archP").onclick = () => {
+    if (!confirm(`Bauvorhaben „${p.number} ${p.title}“ ins Archiv verschieben?`)) return;
+    moveLocal(p, "archive");
+    if (p.remote.folderId) p.moveTo = "archive";
+    touchProject(p);
+    toast(`${p.number} archiviert.`, "info", 2500);
+    go({ selectedProjectId: null, selectedDocId: null }, { replace: true });
+  };
 
-  const titleEl = $("#projTitle");
-  titleEl.addEventListener("input", () => {
-    const v = titleEl.value.trim().replace(/\s+/g, " ");
-    if (!v) return;
+  const clientEl = $("#projClient");
+  const placeEl = $("#projPlace");
+  const onTitle = () => {
+    const c = clientEl.value.trim();
+    if (!c) return; // Bauherr ist Pflicht
     const cur = findProject(p.id);
-    if (cur && cur.title !== v) { cur.title = v; touchProject(cur); }
-  });
-  titleEl.addEventListener("change", () => {
-    if (!titleEl.value.trim()) titleEl.value = p.title;
-  });
+    if (!cur) return;
+    const before = cur.title;
+    setTitleParts(cur, c, placeEl.value);
+    if (cur.title !== before) touchProject(cur);
+  };
+  clientEl.addEventListener("input", onTitle);
+  placeEl.addEventListener("input", onTitle);
+  clientEl.addEventListener("change", () => { if (!clientEl.value.trim()) clientEl.value = p.client; });
+  clientEl.addEventListener("keydown", (e) => { if (e.key === "Enter") placeEl.focus(); });
+  placeEl.addEventListener("keydown", (e) => { if (e.key === "Enter") placeEl.blur(); });
 
   // Inhalt liegt nur online
   if (p.docs === null) {
     $("#newD").disabled = true;
     const c = el(`<div class="card"><p class="muted" id="loadMsg">Inhalt wird aus OneDrive geladen …</p></div>`);
-    app.appendChild(c);
+    main.appendChild(c);
     if (!od.isSignedIn() || !navigator.onLine) {
       $("#loadMsg").textContent = "Der Inhalt liegt nur in OneDrive. Bitte anmelden bzw. Internetverbindung herstellen.";
     } else if (!loadingProjects.has(p.id)) {
@@ -438,93 +581,120 @@ function renderProjectDetail(app, p, d) {
     const now = new Date();
     const doc = {
       id: newId(),
-      title: formatDateDE(now) + " neue Dokumentation",
+      title: formatDateDE(now) + " Dokumentation",
       date: now.toISOString(),
       updatedAt: Date.now(),
       entries: [],
       remote: {},
     };
     p.docs.push(doc);
-    S.state.selectedDocId = doc.id;
     touchDoc(p, doc);
-    render();
+    go({ selectedDocId: doc.id }, { scroll: false });
     const t = $("#docTitle");
     if (t) { t.focus(); t.select(); }
   };
 
-  // ---- Liste der Dokumentationen ----
-  const list = el(`<div class="card"></div>`);
-  if (!p.docs.length) list.appendChild(el(`<p class="muted">Noch keine Dokumentationen.</p>`));
-  p.docs.slice().sort((a, b) => new Date(a.date) - new Date(b.date)).forEach((doc) => {
+  // ---- Dokumentationen (neueste oben) ----
+  const list = el(`<div class="card list-card"><h3 class="section-title">Dokumentationen</h3></div>`);
+  if (!p.docs.length) {
+    list.appendChild(el(`<div class="empty small"><p class="muted">Noch keine Dokumentationen. Lege mit „+ Neue Dokumentation“ die erste an.</p></div>`));
+  }
+  p.docs.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).forEach((doc) => {
     const n = imagesOfDoc(doc).length;
     const r = el(`
       <div class="doc-item ${d && d.id === doc.id ? "selected" : ""}" data-doc-id="${h(doc.id)}">
-        <div>
+        <div class="grow">
           <div class="doc-title">${h(doc.title)}</div>
-          <div class="muted">${formatDateDE(doc.date)} · ${doc.entries.length} Einträge · ${n} Bilder</div>
+          <div class="muted doc-meta">${formatDateDE(doc.date)} · ${doc.entries.length} Einträge · ${n} Fotos</div>
         </div>
-        <div class="row">
-          <button class="small" data-a="pdf" type="button">PDF</button>
-          <button class="danger small" data-a="del" type="button" aria-label="Löschen">X</button>
-        </div>
+        <button class="secondary small" data-a="pdf" type="button">PDF</button>
       </div>`);
     r.onclick = (e) => {
       const a = e.target.closest("[data-a]");
-      if (a) {
-        e.stopPropagation();
-        if (a.dataset.a === "pdf") exportPdf(p.id, doc.id);
-        if (a.dataset.a === "del") deleteDoc(p.id, doc.id);
-        return;
+      if (a) { e.stopPropagation(); exportPdf(p.id, doc.id); return; }
+      if (d && d.id === doc.id) {
+        go({ selectedDocId: null }, { scroll: false });
+      } else {
+        go({ selectedDocId: doc.id }, { replace: !!d, scroll: false });
+        const ed = $("#docEditor");
+        if (ed && window.innerWidth < 1000) ed.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-      go({ selectedDocId: d && d.id === doc.id ? null : doc.id });
     };
     list.appendChild(r);
   });
-  app.appendChild(list);
+  main.appendChild(list);
 
-  if (d) renderDocEditor(app, p, d);
+  if (d) renderDocEditor(side, p, d);
+  else side.appendChild(el(`<div class="card side-hint"><p class="muted">Dokumentation auswählen oder neu anlegen.</p></div>`));
 }
 
 async function deleteDoc(pid, did) {
   const p = findProject(pid);
   const d = p && p.docs.find((x) => x.id === did);
   if (!d) return;
-  const extra = d.remote && d.remote.folderId ? "\n\nDer Ordner in OneDrive (inkl. Bilder und PDF) wird ebenfalls gelöscht (OneDrive-Papierkorb)." : "";
+  const extra = d.remote && d.remote.folderId ? "\n\nDer Ordner in OneDrive (inkl. Fotos und PDF) wird ebenfalls gelöscht (OneDrive-Papierkorb)." : "";
   if (!confirm(`Dokumentation „${d.title}“ wirklich löschen?${extra}`)) return;
   p.docs = p.docs.filter((x) => x.id !== did);
   p.deletedDocs.push({ id: did, at: Date.now() });
   if (d.remote && d.remote.folderId) p.pendingDeletes.push(d.remote.folderId);
   for (const img of imagesOfDoc(d)) { try { await db.imgDelete(img.id); } catch {} }
   try { await db.outboxDelete(`pdf:${pid}:${did}`); } catch {}
-  if (S.state.selectedDocId === did) S.state.selectedDocId = null;
   touchProject(p);
-  render();
+  go({ selectedDocId: null }, { replace: true, scroll: false });
 }
 
 /* =========================================================
    Dokumentation bearbeiten
 ========================================================= */
-function renderDocEditor(app, p, d) {
+function toDateInput(iso) {
+  const dt = new Date(iso);
+  if (isNaN(dt)) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
+function renderDocEditor(container, p, d) {
   const pend = draftImgs[d.id] || [];
   const card = el(`
     <div class="card" id="docEditor">
-      <h3>Dokumentation bearbeiten</h3>
-      <input id="docTitle" type="text" value="${h(d.title)}" />
-      <hr />
-      <h3>Neuer Eintrag</h3>
-      <textarea id="eText" placeholder="Beschreibung">${h(drafts[d.id] || "")}</textarea>
-      <div class="images" id="draftImages">${pend.map((id) => thumbHtml({ id }, true)).join("")}</div>
-      <div class="row wrap" style="margin-top:8px;">
-        <label class="file-btn">📷 Fotos hinzufügen
-          <input id="eImg" type="file" multiple accept="image/*" />
-        </label>
-        <button type="button" class="primary" id="addE">+ Eintrag speichern</button>
+      <div class="row space-between">
+        <h3 class="section-title">Dokumentation</h3>
+        <button class="icon-btn" id="closeDoc" type="button" aria-label="Schließen">✕</button>
       </div>
-      <hr />
-      <h3>Einträge</h3>
+      <div class="doc-fields">
+        <div class="grow">
+          <label class="field-label" for="docTitle">Titel</label>
+          <input id="docTitle" type="text" value="${h(d.title)}" enterkeyhint="done" />
+        </div>
+        <div>
+          <label class="field-label" for="docDate">Datum</label>
+          <input id="docDate" type="date" value="${toDateInput(d.date)}" />
+        </div>
+      </div>
+
+      <div class="new-entry">
+        <label class="field-label" for="eText">Neuer Eintrag</label>
+        <textarea id="eText" placeholder="Was wurde gemacht / festgestellt?">${h(drafts[d.id] || "")}</textarea>
+        <div class="images" id="draftImages">${pend.map((id) => thumbHtml({ id }, true)).join("")}</div>
+        <div class="row wrap entry-actions">
+          ${photoButtons("newImg")}
+          <button type="button" class="primary" id="addE">Eintrag speichern</button>
+        </div>
+      </div>
+
+      <h3 class="section-title">Einträge (${d.entries.length})</h3>
       <div id="elist"></div>
+
+      <div class="row wrap doc-footer">
+        <button class="primary" id="pdfDoc" type="button">PDF erstellen</button>
+        <button class="danger-outline" id="delDoc" type="button">Dokumentation löschen</button>
+      </div>
     </div>`);
-  app.appendChild(card);
+  container.appendChild(card);
+
+  $("#closeDoc").onclick = () => go({ selectedDocId: null }, { scroll: false });
+  $("#pdfDoc").onclick = () => exportPdf(p.id, d.id);
+  $("#delDoc").onclick = () => deleteDoc(p.id, d.id);
 
   const titleEl = $("#docTitle");
   titleEl.addEventListener("input", () => {
@@ -537,21 +707,30 @@ function renderDocEditor(app, p, d) {
     const rowTitle = $(`[data-doc-id="${CSS.escape(d.id)}"] .doc-title`);
     if (rowTitle) rowTitle.textContent = v;
   });
-  titleEl.addEventListener("change", () => {
-    if (!titleEl.value.trim()) titleEl.value = d.title;
+  titleEl.addEventListener("change", () => { if (!titleEl.value.trim()) titleEl.value = d.title; });
+  titleEl.addEventListener("keydown", (e) => { if (e.key === "Enter") titleEl.blur(); });
+
+  $("#docDate").addEventListener("change", (e) => {
+    const v = e.target.value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+    const { p: cp, d: cd } = ctx();
+    if (!cd) return;
+    cd.date = new Date(v + "T12:00:00").toISOString();
+    touchDoc(cp, cd);
+    renderNow();
   });
 
   const tEl = $("#eText");
   tEl.addEventListener("input", () => { drafts[d.id] = tEl.value; });
 
-  $("#eImg").addEventListener("change", async (ev) => {
+  $$("input.newImg", card).forEach((inp) => inp.addEventListener("change", async (ev) => {
     const files = Array.from(ev.target.files || []);
     ev.target.value = "";
     if (!files.length) return;
     const ids = await processFiles(files);
     draftImgs[d.id] = (draftImgs[d.id] || []).concat(ids);
     renderNow();
-  });
+  }));
 
   $$("[data-del-img]", $("#draftImages")).forEach((b) => {
     b.onclick = async (e) => {
@@ -572,7 +751,7 @@ async function processFiles(files) {
   const ids = [];
   try {
     for (let i = 0; i < files.length; i++) {
-      setBusy(`Bild ${i + 1}/${files.length} wird verarbeitet …`);
+      setBusy(files.length > 1 ? `Foto ${i + 1}/${files.length} wird verarbeitet …` : "Foto wird verarbeitet …");
       try {
         const r = await processFile(files[i]);
         const id = newId();
@@ -580,7 +759,7 @@ async function processFiles(files) {
         ids.push(id);
       } catch (e) {
         console.warn(e);
-        toast(`Bild „${files[i].name}“: ${e.message}`, "error", 7000);
+        toast(`Foto „${files[i].name}“: ${e.message}`, "error", 7000);
       }
     }
   } finally {
@@ -603,26 +782,25 @@ async function addEntry() {
   draftImgs[d.id] = [];
   touchDoc(p, d);
   await saveNow();
-  render();
+  renderNow();
+  toast("Eintrag gespeichert.", "info", 1800);
 }
 
 function renderEntries(container, p, d) {
   if (!d.entries.length) {
-    container.appendChild(el(`<p class="muted">Keine Einträge.</p>`));
+    container.appendChild(el(`<p class="muted">Noch keine Einträge.</p>`));
     return;
   }
   d.entries.forEach((en, i) => {
     const c = el(`
-      <div class="card entry" data-entry-id="${h(en.id)}">
+      <div class="entry" data-entry-id="${h(en.id)}">
         <div class="row space-between">
-          <label class="muted">Eintrag ${i + 1}</label>
-          <button class="danger small" data-a="del-entry" type="button">Eintrag löschen</button>
+          <span class="entry-no">${i + 1}.</span>
+          <button class="link-danger small" data-a="del-entry" type="button">Löschen</button>
         </div>
-        <textarea class="entryText">${h(en.description)}</textarea>
+        <textarea class="entryText" placeholder="Beschreibung">${h(en.description)}</textarea>
         <div class="images">${en.images.map((img) => thumbHtml(img, true)).join("")}</div>
-        <label class="file-btn small">📷 Fotos hinzufügen
-          <input type="file" class="entryImg" multiple accept="image/*" />
-        </label>
+        ${photoButtons("entryImg", true)}
       </div>`);
 
     const findEntry = () => {
@@ -649,13 +827,13 @@ function renderEntries(container, p, d) {
       }
       f.cd.entries = f.cd.entries.filter((x) => x.id !== en.id);
       touchDoc(f.cp, f.cd);
-      render();
+      renderNow();
     };
 
     $$("[data-del-img]", c).forEach((b) => {
       b.onclick = async (e) => {
         e.stopPropagation();
-        if (!confirm("Bild löschen?")) return;
+        if (!confirm("Foto löschen?")) return;
         const f = findEntry();
         if (!f) return;
         const img = f.ce.images.find((x) => x.id === b.dataset.delImg);
@@ -664,11 +842,11 @@ function renderEntries(container, p, d) {
         if (img.rid) f.cp.pendingDeletes.push(img.rid);
         try { await db.imgDelete(img.id); } catch {}
         touchDoc(f.cp, f.cd);
-        render();
+        renderNow();
       };
     });
 
-    $(".entryImg", c).addEventListener("change", async (ev) => {
+    $$("input.entryImg", c).forEach((inp) => inp.addEventListener("change", async (ev) => {
       const files = Array.from(ev.target.files || []);
       ev.target.value = "";
       if (!files.length) return;
@@ -678,7 +856,7 @@ function renderEntries(container, p, d) {
       f.ce.images.push(...ids.map((id) => ({ id })));
       touchDoc(f.cp, f.cd);
       renderNow();
-    });
+    }));
 
     container.appendChild(c);
   });
@@ -699,11 +877,13 @@ async function exportPdf(pid, did) {
   const p = findProject(pid);
   const d = p && p.docs && p.docs.find((x) => x.id === did);
   if (!d) return;
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  await saveNow();
   setBusy("PDF wird erstellt …");
   try {
     const { blob, filename, missing } = await buildPdf(p, d, (m) => setBusy(m));
     openPdfPreview(blob, filename);
-    if (missing) toast(`${missing} Bild(er) konnten nicht geladen werden (offline?).`, "warn", 7000);
+    if (missing) toast(`${missing} Foto(s) konnten nicht geladen werden (offline?).`, "warn", 7000);
     if (blob.size > PDF_MAX_BYTES) toast(`PDF ist ${(blob.size / 1048576).toFixed(1)} MB groß (über 15 MB).`, "warn", 7000);
     if (od.isConfigured()) {
       await db.outboxPut({ id: `pdf:${p.id}:${d.id}`, projectId: p.id, docId: d.id, name: filename, blob });
@@ -724,10 +904,18 @@ function openPdfPreview(blob, filename) {
 
   const modal = $("#pdfModal");
   const frame = $("#pdfFrame");
-  frame.src = lastPdf.url;
+  $("#pdfName").textContent = filename;
+  $("#pdfSize").textContent = `${(blob.size / 1048576).toFixed(1)} MB` +
+    (od.isConfigured() ? " · wird im OneDrive-Ordner der Dokumentation abgelegt" : "");
+  // Handy: Browser zeigen PDFs im Rahmen oft nur als erste Seite -> Info + Knöpfe statt Vorschau
+  if (!isTouch) frame.src = lastPdf.url;
   modal.style.display = "block";
+  try { history.pushState({ ...navState(), pdf: true }, ""); } catch {}
 
-  $("#pdfClose").onclick = () => { modal.style.display = "none"; frame.src = "about:blank"; };
+  const close = () => { modal.style.display = "none"; frame.src = "about:blank"; };
+  $("#pdfClose").onclick = () => { if (history.state && history.state.pdf) history.back(); else close(); };
+  window.addEventListener("popstate", close, { once: true });
+
   $("#pdfOpenTab").onclick = () => window.open(lastPdf.url, "_blank");
   $("#pdfDownload").onclick = () => {
     const a = document.createElement("a");
@@ -737,16 +925,14 @@ function openPdfPreview(blob, filename) {
     a.click();
     a.remove();
   };
-  $("#pdfShare").onclick = async () => {
+  const shareBtn = $("#pdfShare");
+  shareBtn.style.display = navigator.share ? "" : "none";
+  shareBtn.onclick = async () => {
     try {
-      if (!navigator.share) {
-        alert("Teilen wird von deinem Browser nicht direkt unterstützt. Nutze „In neuem Tab öffnen“ und dann das Teilen-Symbol im PDF-Viewer.");
-        return;
-      }
       const file = new File([lastPdf.blob], lastPdf.name, { type: "application/pdf" });
-      await navigator.share({ files: [file], title: lastPdf.name, text: "PDF Export aus BauDoc" });
+      await navigator.share({ files: [file], title: lastPdf.name });
     } catch (e) {
-      console.warn("Teilen abgebrochen/fehlgeschlagen", e);
+      if (!e || e.name !== "AbortError") toast("Teilen nicht möglich – bitte „Öffnen“ oder „Speichern“ verwenden.", "warn");
     }
   };
 }
@@ -754,6 +940,28 @@ function openPdfPreview(blob, filename) {
 /* =========================================================
    Einstellungen
 ========================================================= */
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredInstall = e;
+  if (S.state.view === "settings") requestRender();
+});
+
+function installHtml() {
+  if (isStandalone()) return `<p>✓ BauDoc läuft als App.</p>`;
+  if (deferredInstall) return `
+    <p class="muted">BauDoc als App installieren: eigenes Symbol auf dem Startbildschirm, Vollbild, schneller Start.</p>
+    <button class="primary" id="installBtn" type="button">App installieren</button>`;
+  if (isIOS) return `
+    <p class="muted">So wird BauDoc zur App auf dem iPhone/iPad:</p>
+    <ol class="steps">
+      <li>Diese Seite in <strong>Safari</strong> öffnen</li>
+      <li>Unten auf <strong>Teilen</strong> tippen (Quadrat mit Pfeil nach oben)</li>
+      <li><strong>„Zum Home-Bildschirm“</strong> wählen</li>
+    </ol>
+    <p class="muted">Wichtig: Als App bleiben die Daten auf dem Gerät dauerhaft gespeichert.</p>`;
+  return `<p class="muted">Im Browser-Menü <strong>„App installieren“</strong> bzw. <strong>„Zum Startbildschirm hinzufügen“</strong> wählen. Im Browser am PC funktioniert BauDoc auch ohne Installation.</p>`;
+}
+
 function renderSettings(app) {
   const s = sync.status;
   let odHtml;
@@ -764,6 +972,7 @@ function renderSettings(app) {
   } else if (!od.isSignedIn()) {
     odHtml = `
       <p>Nicht angemeldet.${s.message ? ` <span class="muted">(${h(s.message)})</span>` : ""}</p>
+      <p class="muted">Mit dem Firmenkonto anmelden. Danach sind deine Bauvorhaben und Favoriten auf allen deinen Geräten gleich.</p>
       <button class="primary" id="login" type="button">Mit Microsoft anmelden</button>`;
   } else {
     const acc = od.getAccount();
@@ -773,38 +982,30 @@ function renderSettings(app) {
         Letzter Abgleich: ${s.lastSync ? formatDateTimeDE(s.lastSync) : "–"}<br>
         Ausstehend: ${s.pending}${s.kind === "error" ? `<br><span class="error-text">Fehler: ${h(s.message)}</span>` : ""}</p>
       <div class="row wrap">
-        <button class="primary" id="syncNow" type="button">Jetzt synchronisieren</button>
+        <button class="primary" id="syncNow" type="button">Jetzt abgleichen</button>
         <button class="secondary" id="logout" type="button">Abmelden</button>
       </div>`;
   }
 
+  app.appendChild(el(`<div class="page-head"><h1>Einstellungen</h1></div>`));
+  app.appendChild(el(`<div class="card"><h3 class="section-title">Konto &amp; OneDrive</h3>${odHtml}</div>`));
+  app.appendChild(el(`<div class="card"><h3 class="section-title">App</h3>${installHtml()}</div>`));
   app.appendChild(el(`
     <div class="card">
-      <h1>Einstellungen</h1>
-      <h3>OneDrive</h3>
-      ${odHtml}
-    </div>`));
-
-  app.appendChild(el(`
-    <div class="card">
-      <h3>Datensicherung</h3>
-      <p class="muted">Speichert alle Bauvorhaben und alle Bilder, die auf diesem Gerät liegen, in eine Datei.
-      Damit lassen sich die Daten auf einem anderen Gerät oder nach einem Verlust wiederherstellen.</p>
+      <h3 class="section-title">Datensicherung</h3>
+      <p class="muted">Speichert alle Bauvorhaben und alle Fotos, die auf diesem Gerät liegen, in eine Datei.</p>
       <div class="row wrap">
-        <button class="primary" id="bkExport" type="button">Sicherung speichern</button>
+        <button class="secondary" id="bkExport" type="button">Sicherung speichern</button>
         <label class="file-btn">Sicherung laden
           <input id="bkImport" type="file" accept="application/json,.json" />
         </label>
       </div>
     </div>`));
-
-  const storageCard = el(`
+  app.appendChild(el(`
     <div class="card">
-      <h3>Speicher auf diesem Gerät</h3>
+      <h3 class="section-title">Speicher auf diesem Gerät</h3>
       <p class="muted" id="storageInfo">wird ermittelt …</p>
-    </div>`);
-  app.appendChild(storageCard);
-
+    </div>`));
   app.appendChild(el(`<p class="muted center">BauDoc ${h(APP_VERSION)}</p>`));
 
   const loginBtn = $("#login");
@@ -815,11 +1016,17 @@ function renderSettings(app) {
   if (logoutBtn) logoutBtn.onclick = () => {
     if (confirm("Abmelden? Die Daten auf diesem Gerät bleiben erhalten.")) od.logout();
   };
+  const installBtn = $("#installBtn");
+  if (installBtn) installBtn.onclick = async () => {
+    try { deferredInstall.prompt(); await deferredInstall.userChoice; } catch {}
+    deferredInstall = null;
+    render();
+  };
 
   $("#bkExport").onclick = async () => {
     try {
       const r = await exportBackup((m) => setBusy(m));
-      if (r.online) toast(`${r.online} Bild(er) liegen nur in OneDrive und sind nur als Vorschau bzw. gar nicht enthalten.`, "warn", 8000);
+      if (r.online) toast(`${r.online} Foto(s) liegen nur in OneDrive und sind nur als Vorschau bzw. gar nicht enthalten.`, "warn", 8000);
     } catch (e) {
       toast("Sicherung fehlgeschlagen: " + e.message, "error", 8000);
     } finally { setBusy(null); }
@@ -831,8 +1038,8 @@ function renderSettings(app) {
     if (!confirm("Sicherung laden?\n\nAlle Bauvorhaben auf diesem Gerät werden durch den Inhalt der Sicherung ersetzt.")) return;
     try {
       const r = await importBackup(f, (m) => setBusy(m));
-      toast(`Sicherung geladen: ${r.projects} Bauvorhaben, ${r.images} Bilder.`, "info", 6000);
-      render();
+      toast(`Sicherung geladen: ${r.projects} Bauvorhaben, ${r.images} Fotos.`, "info", 6000);
+      go({ view: "projects", selectedProjectId: null, selectedDocId: null }, { replace: true });
       sync.schedule(1000, { full: true });
     } catch (e) {
       toast("Laden fehlgeschlagen: " + e.message, "error", 8000);
@@ -847,8 +1054,10 @@ function renderSettings(app) {
       const mb = (n) => (n / 1048576).toFixed(1) + " MB";
       if (info) {
         info.innerHTML =
-          (est ? `Belegt: ${mb(est.usage || 0)}${est.quota ? ` von ca. ${mb(est.quota)}` : ""}<br>` : "") +
-          (persisted ? "Daten sind vor automatischem Löschen geschützt ✓" : "Daten sind <strong>nicht</strong> vor automatischem Löschen durch den Browser geschützt. Tipp: BauDoc zum Home-Bildschirm hinzufügen.");
+          (est ? `Belegt: ${mb(est.usage || 0)}<br>` : "") +
+          (persisted || isStandalone()
+            ? "Daten sind vor automatischem Löschen geschützt ✓"
+            : "Daten sind <strong>nicht</strong> vor automatischem Löschen durch den Browser geschützt. Tipp: BauDoc als App installieren (siehe oben).");
       }
     } catch {
       if (info) info.textContent = "Keine Angaben verfügbar.";
@@ -869,10 +1078,32 @@ async function cleanupOrphanImages() {
   } catch (e) { console.warn("Aufräumen", e); }
 }
 
+// Anderes Konto als zuletzt? Dann nicht die Daten zweier Nutzer vermischen.
+async function checkAccount() {
+  const acc = od.getAccount();
+  if (!acc) return;
+  const st = S.state;
+  const id = acc.homeAccountId || acc.username;
+  if (st.accountId && st.accountId !== id && allProjects().length) {
+    const ok = confirm(
+      `Angemeldet als ${acc.username}.\n\nAuf diesem Gerät liegen noch Daten eines anderen Kontos. ` +
+      `Sollen diese lokalen Daten entfernt werden? (In OneDrive bleibt alles erhalten.)\n\n` +
+      `Abbrechen = Daten behalten`
+    );
+    if (ok) await resetLocal();
+  }
+  st.accountId = id;
+  await saveNow();
+}
+
 (async function init() {
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
 
   await load();
+  // Startansicht: eigene Favoriten, falls vorhanden
+  if (S.state.view === "projects" && !S.state.selectedProjectId && S.state.projects.some((p) => p.fav)) {
+    S.state.view = "favorites";
+  }
 
   try {
     await od.init();
@@ -880,13 +1111,16 @@ async function cleanupOrphanImages() {
     console.warn("Anmeldung", e);
     toast("Anmeldung fehlgeschlagen: " + (e.message || e), "error", 10000);
   }
+  await checkAccount();
 
+  setupSearch();
   sync.onStatus(() => updateSyncChip());
   sync.onData(() => requestRender());
   onChange((kind) => {
     if (kind === "data") { sync.refreshStatus(); sync.schedule(4000); }
   });
 
+  try { history.replaceState(navState(), ""); } catch {}
   render();
   await sync.updateOutboxCount();
   cleanupOrphanImages();

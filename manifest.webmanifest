@@ -1,10 +1,15 @@
 {
-  "name": "BauDoc",
+  "id": "./",
+  "name": "BauDoc – Baustellendokumentation",
   "short_name": "BauDoc",
-  "start_url": "./index.html",
+  "description": "Baustellendokumentation der Friedrich Bühler GmbH & Co. KG",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#f3f4f6",
-  "theme_color": "#2563eb",
+  "orientation": "any",
+  "background_color": "#f4f4f3",
+  "theme_color": "#ffffff",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }

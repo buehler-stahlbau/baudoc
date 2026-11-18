@@ -23,10 +23,12 @@ function defaultState() {
     version: 2,
     projects: [],
     archivedProjects: [],
-    view: "projects", // "projects" | "archive" | "settings"
+    view: "projects", // "projects" | "favorites" | "archive" | "settings"
     selectedProjectId: null,
     selectedDocId: null,
     remote: { rootId: null, pendingFolderDeletes: [] },
+    prefs: { favUpdatedAt: 0, rev: 0, dirty: false }, // Favoriten je Nutzer
+    accountId: null,
   };
 }
 
@@ -58,7 +60,8 @@ export async function load() {
     const def = defaultState();
     S.state = Object.assign(def, saved);
     S.state.remote = Object.assign(defaultState().remote, saved.remote || {});
-    if (!["projects", "archive", "settings"].includes(S.state.view)) S.state.view = "projects";
+    S.state.prefs = Object.assign(defaultState().prefs, saved.prefs || {});
+    if (!["projects", "favorites", "archive", "settings"].includes(S.state.view)) S.state.view = "projects";
     allProjects().forEach(normalizeProject);
     if (migrated) await saveNow();
   }
@@ -106,6 +109,24 @@ export function touchDoc(p, d) {
   p.dirty = true;
   saveSoon();
   emit("data");
+}
+
+// Favoriten gehören zum Nutzer und werden über OneDrive auf alle seine Geräte verteilt
+export function favoritesChanged() {
+  const pr = S.state.prefs;
+  pr.favUpdatedAt = Date.now();
+  pr.rev = (pr.rev || 0) + 1;
+  pr.dirty = true;
+  saveSoon();
+}
+
+// Alles Lokale entfernen (z. B. bei Wechsel auf ein anderes Konto). OneDrive bleibt unberührt.
+export async function resetLocal() {
+  const keep = { view: "projects", accountId: S.state.accountId };
+  S.state = Object.assign(defaultState(), keep);
+  try { for (const k of await db.imgKeys()) await db.imgDelete(k); } catch {}
+  try { for (const o of await db.outboxAll()) await db.outboxDelete(o.id); } catch {}
+  await saveNow();
 }
 
 /* ---------- Zugriff ---------- */
@@ -156,17 +177,39 @@ export async function removeProjectLocal(p) {
   }
 }
 
-export function newProject(number, title) {
-  return {
-    id: number, number, title, fav: true,
+// Bezeichnung = "Bauherr/Auftraggeber, Bauort"
+export function joinTitle(client, place) {
+  return [client, place].map((x) => String(x || "").trim()).filter(Boolean).join(", ");
+}
+export function splitTitle(title) {
+  const t = String(title || "");
+  const i = t.indexOf(",");
+  return i < 0 ? { client: t.trim(), place: "" } : { client: t.slice(0, i).trim(), place: t.slice(i + 1).trim() };
+}
+export function setTitleParts(p, client, place) {
+  p.client = String(client || "").trim().replace(/\s+/g, " ");
+  p.place = String(place || "").trim().replace(/\s+/g, " ");
+  p.title = joinTitle(p.client, p.place);
+}
+
+export function newProject(number, client, place) {
+  const p = {
+    id: number, number, title: "", client: "", place: "", fav: true,
     docs: [], deletedDocs: [], pendingDeletes: [], moveTo: null,
     remote: {}, updatedAt: Date.now(), rev: 1, dirty: true,
   };
+  setTitleParts(p, client, place);
+  return p;
 }
 
 export function normalizeProject(p) {
   p.number = String(p.number ?? p.id ?? "");
   p.title = String(p.title ?? "");
+  if (typeof p.client !== "string" || typeof p.place !== "string") {
+    const s = splitTitle(p.title);
+    p.client = s.client;
+    p.place = s.place;
+  }
   p.fav = !!p.fav;
   if (!Array.isArray(p.deletedDocs)) p.deletedDocs = [];
   if (!Array.isArray(p.pendingDeletes)) p.pendingDeletes = [];
@@ -242,5 +285,7 @@ async function migrateV1(old) {
   const archivedProjects = [];
   for (const p of old.archivedProjects || []) archivedProjects.push(await convert(p));
 
-  return { ...defaultState(), projects, archivedProjects };
+  const st = { ...defaultState(), projects, archivedProjects };
+  st.prefs = { favUpdatedAt: 0, rev: 1, dirty: true };
+  return st;
 }

@@ -15,7 +15,8 @@ export const CONFIG = {
   driveBase: "/me/drive",
   rootFolder: "BauDoc",
   archiveFolder: "_Archiv",
+  usersFolder: "_Nutzer",   // je Nutzer eine Datei mit seinen Favoriten
   scopes: ["User.Read", "Files.ReadWrite"],
 };
 
-export const APP_VERSION = "2.0.0-beta";
+export const APP_VERSION = "2.1.0-beta";

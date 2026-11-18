@@ -124,8 +124,15 @@ export async function buildPdf(p, d, onProgress = () => {}) {
 
   // ---- Kopf ----
   pdf.setFontSize(16);
-  pdf.text(`${p.number}${p.title ? " – " + p.title : ""}`, margin, y, { maxWidth: maxW });
-  y += 24;
+  pdf.text(`BV ${p.number}${p.client ? " – " + p.client : ""}`, margin, y, { maxWidth: maxW });
+  y += 18;
+  if (p.place) {
+    pdf.setFontSize(11);
+    pdf.setTextColor(90);
+    pdf.text(`Bauort: ${p.place}`, margin, y, { maxWidth: maxW });
+    pdf.setTextColor(0);
+    y += 18;
+  } else y += 6;
   pdf.setFontSize(13);
   pdf.text(d.title || "Dokumentation", margin, y, { maxWidth: maxW });
   y += 16;
