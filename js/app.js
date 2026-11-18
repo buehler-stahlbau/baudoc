@@ -242,10 +242,12 @@ function updateHeader() {
       go({ view, selectedProjectId: null, selectedDocId: null });
     };
   }
-  $("#cntProjects").textContent = st.projects.length;
-  $("#cntFav").textContent = st.projects.filter((p) => p.fav).length;
-  $("#cntArchive").textContent = st.archivedProjects.length;
+  const cnt = (n) => (n ? String(n) : ""); // 0 nicht anzeigen
+  $("#cntProjects").textContent = cnt(st.projects.length);
+  $("#cntFav").textContent = cnt(st.projects.filter((p) => p.fav).length);
+  $("#cntArchive").textContent = cnt(st.archivedProjects.length);
 
+  $("#searchBtn").classList.toggle("active", !!filterText.trim());
   const search = $("#search");
   search.placeholder = st.view === "archive" ? "Archiv durchsuchen …" : "Suchen: Nr., Bauherr, Ort …";
   if (search.value !== filterText) search.value = filterText;
@@ -254,6 +256,22 @@ function updateHeader() {
 
 function setupSearch() {
   const search = $("#search");
+  const bar = $("#appbar");
+  // App-Ansicht: Lupe klappt das Suchfeld auf
+  $("#searchBtn").onclick = () => {
+    bar.classList.add("searching");
+    search.focus();
+  };
+  const closeSearch = () => {
+    bar.classList.remove("searching");
+    if (filterText) { filterText = ""; search.value = ""; render(); }
+    search.blur();
+  };
+  $("#searchClose").onclick = closeSearch;
+  search.addEventListener("blur", () => {
+    // leer verlassen -> wieder zuklappen
+    if (!search.value.trim()) setTimeout(() => { if (document.activeElement !== search) bar.classList.remove("searching"); }, 150);
+  });
   search.addEventListener("input", () => {
     filterText = search.value;
     const st = S.state;
@@ -272,7 +290,7 @@ function setupSearch() {
       if (hits.length === 1) hits[0].click();
       else search.blur();
     }
-    if (e.key === "Escape") { search.value = ""; filterText = ""; render(); }
+    if (e.key === "Escape") closeSearch();
   });
 }
 
@@ -308,6 +326,10 @@ function updateSyncChip() {
   chip.textContent = texts[s.kind] || s.kind;
   chip.className = "sync-chip " + s.kind;
   chip.title = titles[s.kind] || "";
+  const dot = $("#syncDot");
+  if (dot) dot.className = "sync-dot " + s.kind;
+  const set = $("#tabSettings");
+  if (set) set.title = "Einstellungen" + (titles[s.kind] ? " – " + titles[s.kind] : "");
   chip.onclick = () => {
     if (s.kind === "signedout") { od.login(); return; }
     if (s.kind === "error") { toast(s.message || "Unbekannter Fehler", "error", 8000); sync.run({ full: true }); return; }
