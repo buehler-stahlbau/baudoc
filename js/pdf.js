@@ -8,7 +8,7 @@ import * as db from "./db.js";
 import * as od from "./onedrive.js";
 import { toPdfImage } from "./images.js";
 import { formatDateDE, sanitizeName, isoDay } from "./util.js";
-import { imagesOfDoc, CONTRACTOR_COMPANY } from "./store.js";
+import { imagesOfDoc } from "./store.js";
 
 export const PDF_MAX_BYTES = 15 * 1024 * 1024;
 const IMG_BUDGET = 13.5 * 1024 * 1024;
@@ -158,11 +158,11 @@ export async function buildPdf(p, d, onProgress = () => {}) {
   pdf.setFontSize(13);
   pdf.text(d.title || "Dokumentation", margin, y, { maxWidth: maxW });
   y += 16;
-  pdf.setFontSize(11);
+  pdf.setFontSize(9.5);
   pdf.setTextColor(90);
   pdf.text("Datum: " + formatDateDE(d.date), margin, y);
   pdf.setTextColor(0);
-  y += 16;
+  y += 14;
 
   // Unterschrift (PNG) in einen Rahmen einpassen
   async function drawSig(sig, x, top, boxW, boxH) {
@@ -273,55 +273,6 @@ export async function buildPdf(p, d, onProgress = () => {}) {
       }
       y += rowH + 10;
     }
-  }
-
-  // ---- Unterschriften Auftragnehmer / Auftraggeber ----
-  if (proto) {
-    const blockH = 130;
-    y += 24;
-    ensureSpace(blockH);
-    const colGap = 30;
-    const colW = (maxW - colGap) / 2;
-    const parties = [
-      { label: "Auftragnehmer", company: CONTRACTOR_COMPANY, s: proto.contractor },
-      { label: "Auftraggeber", company: p.client || "", s: proto.client },
-    ];
-    parties.forEach((pt, i) => {
-      const x = margin + i * (colW + colGap);
-      let yy = y;
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(11);
-      pdf.text(pt.label, x, yy);
-      pdf.setFont("helvetica", "normal");
-      yy += 14;
-      pdf.setFontSize(10);
-      pdf.text(pdf.splitTextToSize(pt.company, colW).slice(0, 2), x, yy);
-      yy += 22;
-      pdf.setFontSize(10);
-      pdf.setTextColor(90);
-      pdf.text("Ort, Datum:", x, yy);
-      pdf.setTextColor(0);
-      if (pt.s && pt.s.sig && pt.s.sigAt) {
-        pdf.text(`${p.place ? p.place + ", " : ""}${formatDateDE(pt.s.sigAt)}`, x + 58, yy);
-      } else {
-        pdf.setDrawColor(150);
-        pdf.line(x + 58, yy + 2, x + colW, yy + 2);
-      }
-    });
-    const sigTop = y + 44;
-    const sigH = 50;
-    for (let i = 0; i < parties.length; i++) {
-      const x = margin + i * (colW + colGap);
-      const pt = parties[i];
-      if (pt.s && pt.s.sig) await drawSig(pt.s.sig, x, sigTop, colW * 0.8, sigH);
-      pdf.setDrawColor(120);
-      pdf.line(x, sigTop + sigH + 4, x + colW, sigTop + sigH + 4);
-      pdf.setFontSize(8.5);
-      pdf.setTextColor(110);
-      pdf.text(pt.s && pt.s.name ? `Unterschrift (${pt.s.name})` : "Unterschrift, Name in Druckbuchstaben", x, sigTop + sigH + 15);
-      pdf.setTextColor(0);
-    }
-    y = sigTop + sigH + 24;
   }
 
   // ---- Seitenzahlen ----

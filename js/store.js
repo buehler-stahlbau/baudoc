@@ -233,7 +233,7 @@ export function newProtocol(p) {
     enabled: true,
     attendees: [
       { id: newId(), name: "", company: CONTRACTOR_COMPANY, sig: null, sigAt: null },
-      { id: newId(), name: "", company: p.client || "", sig: null, sigAt: null },
+      { id: newId(), name: "", company: "", sig: null, sigAt: null },
     ],
     contractor: { name: "", sig: null, sigAt: null },
     client: { name: "", sig: null, sigAt: null },

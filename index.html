@@ -70,7 +70,7 @@
       box-shadow: 0 1px 4px rgba(0,0,0,.05);
     }
     .appbar-inner { position: relative; max-width: 1200px; margin: 0 auto; display: flex; align-items: center; gap: 8px; }
-    .appbar .logo { height: 30px; flex: 0 0 auto; margin-left: 4px; }
+    .appbar .logo { height: 32px; width: auto; flex: 0 0 auto; margin-left: 4px; }
     .ico { width: 22px; height: 22px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
     .tabs { display: flex; gap: 6px; align-items: center; }
@@ -125,7 +125,7 @@
       .tab.active .cnt { background: var(--brand-red); }
       .sync-chip { display: none; }
       .sync-dot { display: block; }
-      .appbar .logo { height: 22px; margin-left: auto; }
+      .appbar .logo { height: 26px; margin-left: auto; }
       .search-wrap { display: none; }
       /* Suche aufgeklappt: Feld legt sich über die Zeile */
       .appbar.searching .search-wrap { display: flex; position: absolute; inset: 0; background: #fff; z-index: 2; gap: 6px; }
@@ -135,12 +135,12 @@
     @media (max-width: 400px){
       .tabs, .appbar-inner { gap: 4px; }
       .tab, #searchBtn { width: 40px; height: 40px; }
-      .appbar .logo { height: 17px; }
+      .appbar .logo { height: 23px; }
     }
     @media (max-width: 350px){
       .tab, #searchBtn { width: 36px; height: 36px; }
       .ico { width: 20px; height: 20px; }
-      .appbar .logo { height: 14px; }
+      .appbar .logo { height: 17px; }
     }
 
     /* ---------- Inhalt ---------- */
@@ -169,12 +169,9 @@
     button { min-height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--brand-gray-200); background: var(--brand-gray-200); cursor:pointer; font: inherit; font-weight: 600; color: inherit; touch-action: manipulation; }
     button:disabled { opacity: .5; cursor: default; }
     button.primary { background: var(--brand-primary); border-color: var(--brand-primary); color:#fff; }
-    button.primary:hover { background: var(--brand-primary-dark); border-color: var(--brand-primary-dark); }
     button.danger { background: var(--brand-red); border-color: var(--brand-red); color:#fff; }
     button.danger-outline { background: #fff; border-color: rgba(203,49,48,.45); color: var(--brand-red-dark); }
-    button.danger-outline:hover { background: var(--brand-red-soft); }
     button.secondary { background: #fff; border-color: var(--brand-gray-200); }
-    button.secondary:hover { background: var(--brand-gray-100); }
     button.small { min-height: 34px; padding: 0 10px; font-size: 0.85rem; }
     button.block { width: 100%; margin-top: 10px; }
     button.link-danger { background: none; border: 0; color: var(--brand-red-dark); padding: 0 6px; min-height: 30px; font-weight: 500; }
@@ -192,7 +189,6 @@
     .project-item, .archive-item { display:flex; align-items:center; gap:12px; padding: 10px 14px; border-top: 1px solid var(--brand-gray-100); min-height: 60px; }
     .project-item { cursor:pointer; }
     .list-card > .project-item:first-child, .list-card > .archive-item:first-child { border-top: 0; }
-    .project-item:hover { background: #fafaf9; }
     .project-item:active { background: var(--brand-gray-100); }
     .p-info { flex:1; min-width:0; }
     .p-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -210,7 +206,6 @@
 
     .fav-btn { width: var(--tap); height: var(--tap); min-height: 0; flex: 0 0 auto; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; font-size:20px; line-height:1; background:#fff; border:1px solid var(--brand-gray-200); cursor:pointer; padding:0; color: var(--brand-gray-700); }
     .fav-btn.is-fav { color: var(--fav); background: var(--fav-soft); border-color: rgba(214,162,28,.55); }
-    .fav-btn.is-fav:hover { background: rgba(214,162,28,.22); }
 
     /* ---------- Neues Bauvorhaben ---------- */
     .add-row { display:grid; grid-template-columns: 7em 1fr 1fr; gap:8px; }
@@ -220,7 +215,6 @@
     .bv-fields { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; margin-top: 12px; }
     .actions { margin-top: 12px; }
     .doc-item { display:flex; align-items:center; gap:10px; cursor:pointer; padding: 10px 14px; border-top: 1px solid var(--brand-gray-100); min-height: 58px; }
-    .doc-item:hover { background: #fafaf9; }
     .doc-item.selected { background: rgba(71,70,66,.07); box-shadow: inset 3px 0 0 var(--brand-red); }
     .doc-title { font-weight:700; }
     .doc-fields { display: grid; grid-template-columns: 1fr 11em; gap: 10px; margin-bottom: 14px; }
@@ -245,6 +239,20 @@
       .entry-actions .primary { width: 100%; }
       .doc-footer button { flex: 1; }
     }
+
+    /* Hover-Effekte nur mit Maus – am Handy bleibt sonst nach dem Tippen ein dunklerer Ton stehen */
+    @media (hover: hover) and (pointer: fine){
+      button.primary:hover { background: var(--brand-primary-dark); border-color: var(--brand-primary-dark); }
+      button.danger-outline:hover { background: var(--brand-red-soft); }
+      button.secondary:hover, .file-btn:hover { background: var(--brand-gray-100); }
+      .project-item:hover, .doc-item:hover { background: #fafaf9; }
+      .fav-btn.is-fav:hover { background: rgba(214,162,28,.22); }
+    }
+    button:active, .file-btn:active { filter: brightness(.94); }
+
+    .ico-sm { width: 18px; height: 18px; }
+    .project-item.flash { animation: flash 2.2s ease-out; }
+    @keyframes flash { 0%, 30% { background: var(--fav-soft); } 100% { background: transparent; } }
 
     /* ---------- Fotos ---------- */
     .images { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
@@ -277,13 +285,16 @@
     .party input { width: 100%; }
     .sig-thumb { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 8px; background: #fff; border: 1px solid var(--brand-gray-200); font-weight: 500; }
     .sig-thumb img { height: 38px; max-width: 150px; object-fit: contain; display: block; }
+    .att-row input { min-height: 38px; padding: 6px 9px; }
+    .att-row .sign-btn, .att-row .sig-thumb { min-height: 38px; }
+    .proto-hint { margin: 10px 0 0; }
+    .proto h4 .muted { font-weight: 400; }
     @media (max-width: 600px){
-      .att-row { grid-template-columns: 1fr 40px; }
-      .att-row .att-name { grid-column: 1; }
-      .att-row .att-del { grid-column: 2; grid-row: 1; }
-      .att-row .att-company { grid-column: 1 / -1; }
-      .att-row .att-sig { grid-column: 1 / -1; }
-      .party-grid { grid-template-columns: 1fr; }
+      /* Handy: Name + Firma nebeneinander, darunter Unterschrift und Entfernen */
+      .att-row { grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 0; }
+      .att-row .att-sig { grid-column: 1; }
+      .att-row .att-del { grid-column: 2; justify-self: end; }
+      .sig-thumb img { height: 30px; }
     }
 
     /* Unterschriftenfeld */
@@ -309,17 +320,20 @@
     /* ---------- PDF ---------- */
     #pdfModal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; }
     #pdfModal .inner { position:absolute; inset: calc(14px + var(--safe-top)) 14px calc(14px + var(--safe-bottom)) 14px; background:#fff; border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
-    #pdfModal .bar { padding:10px; display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; border-bottom:1px solid var(--brand-gray-200); }
+    #pdfModal .bar { padding:10px; display:flex; gap:8px; align-items:center; border-bottom:1px solid var(--brand-gray-200); background:#fff; }
+    .pdf-title { flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.25; }
+    .pdf-title strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #pdfModal iframe { flex:1; width:100%; border:0; }
-    .pdf-info { display: none; padding: 24px 18px; text-align: center; }
-    .pdf-info .pdf-icon { font-size: 3rem; }
+    .pdf-pages { display:none; flex:1; overflow:auto; -webkit-overflow-scrolling: touch; background: var(--brand-gray-200); padding: 8px; text-align:center; }
+    .pdf-page { display:block; margin: 0 auto 8px; background:#fff; box-shadow: 0 1px 4px rgba(0,0,0,.2); max-width: 100%; height: auto; }
     @media (pointer: coarse){
-      #pdfModal iframe { display: none; }
-      #pdfModal .inner { inset: auto 0 0 0; border-radius: 16px 16px 0 0; padding-bottom: var(--safe-bottom); }
-      #pdfModal .bar { order: 2; border: 0; justify-content: stretch; padding: 0 14px 14px; }
-      #pdfModal .bar button { flex: 1 1 28%; min-height: 46px; }
-      #pdfModal #pdfShare { order: -1; flex: 1 1 100%; min-height: 52px; font-size: 1.05rem; }
-      .pdf-info { display: block; }
+      #pdfModal .inner { inset: 0; border-radius: 0; padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
+      #pdfModal iframe { display:none; }
+      .pdf-pages { display:block; }
+      #pdfModal .bar { flex-wrap: wrap; }
+      .pdf-title { order: -1; flex: 1 1 100%; }
+      #pdfModal .bar button { flex: 1 1 0; min-height: 46px; }
+      #pdfModal #pdfShare { flex: 2 1 0; }
     }
 
     /* ---------- Großansicht, Fortschritt, Meldungen ---------- */
@@ -360,18 +374,15 @@
   <!-- PDF -->
   <div id="pdfModal">
     <div class="inner">
-      <div class="pdf-info">
-        <div class="pdf-icon">📄</div>
-        <p><strong id="pdfName"></strong></p>
-        <p class="muted" id="pdfSize"></p>
-      </div>
       <div class="bar">
         <button id="pdfClose" class="secondary" type="button">Schließen</button>
-        <button id="pdfOpenTab" class="secondary" type="button">Öffnen</button>
+        <div class="pdf-title"><strong id="pdfName"></strong><span class="muted" id="pdfSize"></span></div>
+        <button id="pdfOpenTab" class="secondary" type="button">In neuem Tab</button>
         <button id="pdfDownload" class="secondary" type="button">Speichern</button>
         <button id="pdfShare" class="primary" type="button">Teilen</button>
       </div>
       <iframe id="pdfFrame" title="PDF-Vorschau"></iframe>
+      <div id="pdfPages" class="pdf-pages"></div>
     </div>
   </div>
 

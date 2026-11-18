@@ -36,6 +36,7 @@ const drafts = {};      // docId -> Text "Neuer Eintrag"
 const draftImgs = {};   // docId -> [imageId] für "Neuer Eintrag"
 let filterText = "";
 let addOpen = false;
+let justAdded = null; // frisch angelegtes BV kurz hervorheben
 let pendingRender = false;
 let deferredInstall = null;
 const loadingProjects = new Set();
@@ -150,10 +151,10 @@ function thumbHtml(img, deletable = true) {
 function photoButtons(cls, small = false) {
   return `
     <div class="photo-btns">
-      <label class="file-btn camera-only ${small ? "small" : ""}">📷 Kamera
+      <label class="file-btn camera-only ${small ? "small" : ""}"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg> Kamera
         <input class="${cls}" type="file" accept="image/*" capture="environment" />
       </label>
-      <label class="file-btn ${small ? "small" : ""}">🖼 ${isTouch ? "Fotos" : "Fotos hinzufügen"}
+      <label class="file-btn ${small ? "small" : ""}"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg> ${isTouch ? "Fotos" : "Fotos hinzufügen"}
         <input class="${cls}" type="file" accept="image/*" multiple />
       </label>
     </div>`;
@@ -408,7 +409,7 @@ function projectRow(p) {
   }
   const pend = p.dirty && od.isConfigured() ? ` <span class="muted" title="Noch nicht hochgeladen">⏳</span>` : "";
   const row = el(`
-    <div class="project-item" data-pid="${h(p.id)}">
+    <div class="project-item ${justAdded === p.id ? "flash" : ""}" data-pid="${h(p.id)}">
       <button class="fav-btn ${p.fav ? "is-fav" : ""}" type="button" data-a="fav" aria-label="Favorit umschalten">${p.fav ? "★" : "☆"}</button>
       <div class="p-info">
         <div class="p-title"><span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}</div>
@@ -455,7 +456,12 @@ function addProject() {
   touchProject(p);
   favoritesChanged();
   addOpen = false;
-  go({ selectedProjectId: p.id, selectedDocId: null });
+  justAdded = p.id;
+  render();
+  toast(`BV ${p.number} angelegt.`, "info", 2500);
+  const row = $(`.project-item[data-pid="${CSS.escape(p.id)}"]`);
+  if (row) row.scrollIntoView({ block: "center", behavior: "smooth" });
+  setTimeout(() => { justAdded = null; }, 2500);
 }
 
 function toggleFav(p) {
@@ -798,14 +804,14 @@ function sigCell(sig, sigAt, key) {
     ? `<button class="sig-thumb" data-sign="${h(key)}" type="button" title="Unterschrift ändern">
          <img src="${sig}" alt="Unterschrift" /><span class="muted">${sigAt ? formatDateDE(sigAt) : ""}</span>
        </button>`
-    : `<button class="secondary small sign-btn" data-sign="${h(key)}" type="button">✍ Unterschreiben</button>`;
+    : `<button class="secondary small sign-btn" data-sign="${h(key)}" type="button"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21c3-1 5-4 7-4s1 3 4 3 4-3 7-3"/><path d="M14.5 4.5l3 3L9 16l-4 1 1-4z"/></svg> Unterschreiben</button>`;
 }
 
 function renderProtocol(box, p, d) {
   const pr = d.protocol;
   box.appendChild(el(`
     <div class="proto">
-      <h4>Anwesende</h4>
+      <h4>Anwesende <span class="muted">· Unterschrift direkt hinter dem Namen</span></h4>
       <div id="attList">
         ${pr.attendees.map((a) => `
           <div class="att-row" data-att="${h(a.id)}">
@@ -816,21 +822,7 @@ function renderProtocol(box, p, d) {
           </div>`).join("")}
       </div>
       <button class="secondary small" id="attAdd" type="button">+ Person hinzufügen</button>
-
-      <h4>Unterschriften am Ende des Protokolls</h4>
-      <div class="party-grid">
-        <div class="party">
-          <div class="field-label">Auftragnehmer · ${h(CONTRACTOR_COMPANY)}</div>
-          <input class="party-name" data-party="contractor" type="text" placeholder="Name (Bauleiter)" value="${h(pr.contractor.name)}" />
-          ${sigCell(pr.contractor.sig, pr.contractor.sigAt, "party:contractor")}
-        </div>
-        <div class="party">
-          <div class="field-label">Auftraggeber${p.client ? " · " + h(p.client) : ""}</div>
-          <input class="party-name" data-party="client" type="text" placeholder="Name" value="${h(pr.client.name)}" />
-          ${sigCell(pr.client.sig, pr.client.sigAt, "party:client")}
-        </div>
-      </div>
-      <p class="muted">Nicht unterschriebene Felder bleiben im PDF frei – zum Unterschreiben auf Papier. Nachträglich unterschreiben: hier unterschreiben und PDF neu erstellen.</p>
+      <p class="muted proto-hint">Ohne Unterschrift bleibt das Feld im PDF frei (zum Unterschreiben auf Papier). Nachträglich unterschreiben: hier unterschreiben und PDF neu erstellen.</p>
     </div>`));
 
   const cur = () => {
@@ -869,11 +861,6 @@ function renderProtocol(box, p, d) {
     const inp = $(`[data-att="${CSS.escape(id)}"] .att-name`);
     if (inp) inp.focus();
   };
-  $$(".party-name", box).forEach((inp) => inp.addEventListener("input", () => {
-    const c = cur(); if (!c) return;
-    c.pr[inp.dataset.party].name = inp.value;
-    touchDoc(c.cp, c.cd);
-  }));
 
   $$("[data-sign]", box).forEach((b) => {
     b.onclick = async () => {
@@ -1064,15 +1051,30 @@ function openPdfPreview(blob, filename, shareText = "") {
 
   const modal = $("#pdfModal");
   const frame = $("#pdfFrame");
+  const pages = $("#pdfPages");
   $("#pdfName").textContent = filename;
   $("#pdfSize").textContent = `${(blob.size / 1048576).toFixed(1)} MB` +
-    (od.isConfigured() ? " · wird im OneDrive-Ordner der Dokumentation abgelegt" : "");
-  // Handy: Browser zeigen PDFs im Rahmen oft nur als erste Seite -> Info + Knöpfe statt Vorschau
-  if (!isTouch) frame.src = lastPdf.url;
+    (od.isConfigured() ? " · wird in OneDrive abgelegt" : "");
   modal.style.display = "block";
+  document.body.style.overflow = "hidden";
+  if (isTouch) {
+    // Handy/Tablet: Seiten direkt in der App anzeigen (Browser können PDFs dort oft nicht öffnen)
+    pages.innerHTML = `<p class="muted center">PDF wird angezeigt …</p>`;
+    renderPdfPages(blob, pages).catch((e) => {
+      console.warn(e);
+      pages.innerHTML = `<p class="muted center">Vorschau nicht möglich – bitte „Teilen“ verwenden.</p>`;
+    });
+  } else {
+    frame.src = lastPdf.url;
+  }
   try { history.pushState({ ...navState(), pdf: true }, ""); } catch {}
 
-  const close = () => { modal.style.display = "none"; frame.src = "about:blank"; };
+  const close = () => {
+    modal.style.display = "none";
+    frame.src = "about:blank";
+    pages.innerHTML = "";
+    document.body.style.overflow = "";
+  };
   $("#pdfClose").onclick = () => { if (history.state && history.state.pdf) history.back(); else close(); };
   window.addEventListener("popstate", close, { once: true });
 
@@ -1085,6 +1087,9 @@ function openPdfPreview(blob, filename, shareText = "") {
     a.click();
     a.remove();
   };
+  $("#pdfOpenTab").style.display = isTouch ? "none" : "";
+  // iPhone: „Speichern“ steckt im Teilen-Menü („In Dateien sichern“)
+  $("#pdfDownload").style.display = isIOS && navigator.share ? "none" : "";
   const shareBtn = $("#pdfShare");
   shareBtn.style.display = navigator.share ? "" : "none";
   shareBtn.onclick = async () => {
@@ -1099,6 +1104,49 @@ function openPdfPreview(blob, filename, shareText = "") {
       if (!e || e.name !== "AbortError") toast("Teilen nicht möglich – bitte „Öffnen“ oder „Speichern“ verwenden.", "warn");
     }
   };
+}
+
+// pdf.js erst bei Bedarf laden (spart Ladezeit beim Start)
+let pdfjsPromise = null;
+function loadPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (!pdfjsPromise) {
+    pdfjsPromise = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "vendor/pdf.min.js";
+      s.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
+        resolve(window.pdfjsLib);
+      };
+      s.onerror = () => { pdfjsPromise = null; reject(new Error("PDF-Anzeige konnte nicht geladen werden")); };
+      document.head.appendChild(s);
+    });
+  }
+  return pdfjsPromise;
+}
+
+async function renderPdfPages(blob, container) {
+  const lib = await loadPdfJs();
+  const data = new Uint8Array(await blob.arrayBuffer());
+  const doc = await lib.getDocument({ data }).promise;
+  container.innerHTML = "";
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const cssW = Math.min(container.clientWidth - 16, 900);
+  for (let n = 1; n <= doc.numPages; n++) {
+    if (!container.isConnected || $("#pdfModal").style.display === "none") return;
+    const page = await doc.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    const scale = (cssW / base.width) * dpr;
+    const vp = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(vp.width);
+    canvas.height = Math.floor(vp.height);
+    canvas.style.width = cssW + "px";
+    canvas.className = "pdf-page";
+    container.appendChild(canvas);
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise;
+  }
+  doc.destroy();
 }
 
 /* =========================================================
