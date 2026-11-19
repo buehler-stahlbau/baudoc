@@ -10,7 +10,7 @@ import {
   S, load, saveNow, saveSoon, touchProject, touchDoc, onChange,
   findProject, findByNumber, newProject, moveLocal, removeProjectLocal,
   allProjects, imagesOfDoc, imagesOfProject, favoritesChanged, resetLocal, setTitleParts,
-  newProtocol, CONTRACTOR_COMPANY,
+  newProtocol, CONTRACTOR_COMPANY, renumberProject,
 } from "./store.js";
 import { captureSignature } from "./signature.js";
 import { captureFromWebcam, hasWebcam, isMobileDevice } from "./camera.js";
@@ -553,7 +553,11 @@ function renderProjectDetail(app, p, d) {
     <div class="card">
       <div class="row">
         <button id="back" class="icon-btn" type="button" aria-label="Zurück">←</button>
-        <span class="bv-num big grow">BV ${h(p.number)}</span>
+        <label class="bv-num-edit grow" title="BV-Nummer ändern">
+          <span class="bv-num big">BV</span>
+          <input id="projNum" class="bv-num big" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" value="${h(p.number)}" aria-label="BV-Nummer" enterkeyhint="done" />
+          <svg class="ico ico-sm edit-hint" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5l3 3L8 17l-4 1 1-4z"/></svg>
+        </label>
         <button class="fav-btn ${p.fav ? "is-fav" : ""}" id="favD" type="button" aria-label="Favorit umschalten"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.8 5.9 6.2.7-4.6 4.3 1.2 6.1L12 17l-5.6 3 1.2-6.1L3 9.6l6.2-.7z"/></svg></button>
       </div>
       <div class="bv-fields">
@@ -567,7 +571,7 @@ function renderProjectDetail(app, p, d) {
         </div>
       </div>
       <div class="row wrap actions">
-        <button class="primary" id="newD" type="button">+ Neue Dokumentation</button>
+        <button class="primary" id="newD" type="button"><span class="long">+ Neue Dokumentation</span><span class="short">+ Neue Doku</span></button>
         <button class="secondary" id="archP" type="button">Archivieren</button>
       </div>
     </div>`);
@@ -583,6 +587,32 @@ function renderProjectDetail(app, p, d) {
     toast(`${p.number} archiviert.`, "info", 2500);
     go({ selectedProjectId: null, selectedDocId: null }, { replace: true });
   };
+
+  // BV-Nummer ändern (nach Bestätigung)
+  const numEl = $("#projNum");
+  numEl.addEventListener("input", () => { numEl.value = numEl.value.replace(/\D/g, "").slice(0, 5); });
+  numEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") numEl.blur();
+    if (e.key === "Escape") { numEl.value = p.number; numEl.blur(); }
+  });
+  numEl.addEventListener("change", () => {
+    const cur = findProject(p.id);
+    if (!cur) return;
+    const v = numEl.value.trim();
+    if (v === cur.number) return;
+    if (!/^\d{5}$/.test(v)) {
+      toast("Die BV-Nummer muss 5-stellig sein (nur Ziffern).", "warn");
+      numEl.value = cur.number;
+      return;
+    }
+    const extra = cur.remote && cur.remote.folderId ? "\nDer Ordner in OneDrive wird automatisch umbenannt." : "";
+    if (!confirm(`BV-Nummer von ${cur.number} auf ${v} ändern?${extra}`)) { numEl.value = cur.number; return; }
+    const err = renumberProject(cur, v);
+    if (err) { toast(err, "warn", 6000); numEl.value = cur.number; return; }
+    favoritesChanged(); // Favoriten auf anderen Geräten richtig zuordnen
+    toast(`BV-Nummer geändert: ${v}`, "info", 2500);
+    renderNow();
+  });
 
   const clientEl = $("#projClient");
   const placeEl = $("#projPlace");

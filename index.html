@@ -211,6 +211,15 @@
     .archive-item { flex-wrap: wrap; }
     .bv-num { font-variant-numeric: tabular-nums; font-weight:700; color: var(--brand-red); }
     .bv-num.big { font-size:1.2rem; }
+    .bv-num-edit { display: inline-flex; align-items: center; gap: 4px; min-width: 0; cursor: text; }
+    #projNum { width: 4.2em; min-height: 36px; padding: 2px 4px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: inherit; font-weight: 700; color: var(--brand-red); font-variant-numeric: tabular-nums; }
+    #projNum:hover { border-color: var(--brand-gray-200); }
+    #projNum { font-size: 1.2rem !important; } /* gleich groß wie "BV" (auch am Handy) */
+    .actions .short { display: none; }
+    @media (max-width: 600px){ .actions .long { display: none; } .actions .short { display: inline; } }
+    #projNum:focus { border-color: var(--brand-gray-500); background: #fff; box-shadow: 0 0 0 3px rgba(71,70,66,.12); outline: none; }
+    .bv-num-edit .edit-hint { color: var(--brand-gray-500); opacity: .7; }
+    #projNum:focus + .edit-hint { opacity: 0; }
     .badge { font-size: 0.78rem; color: var(--brand-primary-dark); background: var(--brand-primary-soft); border-radius:999px; padding:1px 8px; }
 
     .empty { text-align: center; padding: 26px 18px !important; }

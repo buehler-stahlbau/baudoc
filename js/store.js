@@ -193,9 +193,30 @@ export function setTitleParts(p, client, place) {
   p.title = joinTitle(p.client, p.place);
 }
 
+// Interne Kennung: normalerweise die BV-Nummer; ist sie schon vergeben
+// (z. B. weil ein BV umnummeriert wurde), eine neue eindeutige Kennung.
+export function uniqueProjectId(number) {
+  return allProjects().some((x) => x.id === number) ? newId() : number;
+}
+
+// BV-Nummer ändern. Rückgabe: Fehlermeldung oder null
+export function renumberProject(p, number) {
+  number = String(number || "").trim();
+  if (!/^\d{5}$/.test(number)) return "Die BV-Nummer muss 5-stellig sein (nur Ziffern).";
+  if (number === p.number) return null;
+  const ex = findByNumber(number);
+  if (ex && ex !== p) {
+    const where = S.state.archivedProjects.includes(ex) ? " (im Archiv)" : "";
+    return `BV ${number} existiert bereits${where}: ${ex.number} ${ex.title}`;
+  }
+  p.number = number;
+  touchProject(p);
+  return null;
+}
+
 export function newProject(number, client, place) {
   const p = {
-    id: number, number, title: "", client: "", place: "", fav: true,
+    id: uniqueProjectId(number), number, title: "", client: "", place: "", fav: true,
     docs: [], deletedDocs: [], pendingDeletes: [], moveTo: null,
     remote: {}, updatedAt: Date.now(), rev: 1, dirty: true,
   };

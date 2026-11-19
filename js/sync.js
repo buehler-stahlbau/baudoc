@@ -23,7 +23,7 @@ import * as od from "./onedrive.js";
 import * as db from "./db.js";
 import { CONFIG } from "./config.js";
 import {
-  S, saveNow, allProjects, findByNumber, isActive, moveLocal,
+  S, saveNow, allProjects, findByNumber, isActive, moveLocal, uniqueProjectId,
   removeProjectLocal, normalizeProject, imagesOfDoc, imagesOfProject,
 } from "./store.js";
 import { sanitizeName, projectLabel, sleep, isoDay } from "./util.js";
@@ -239,10 +239,10 @@ async function refreshListing(root) {
   const foundIds = new Set(found.map((f) => f.item.id));
 
   for (const f of found) {
-    let p = findByNumber(f.number);
+    let p = allProjects().find((x) => x.remote && x.remote.folderId === f.item.id) || findByNumber(f.number);
     if (!p) {
       p = {
-        id: f.number, number: f.number, title: f.title, fav: false,
+        id: uniqueProjectId(f.number), number: f.number, title: f.title, fav: false,
         docs: null, deletedDocs: [], pendingDeletes: [], moveTo: null,
         remote: { folderId: f.item.id, baseName: f.item.name, etag: null },
         updatedAt: 0, rev: 0, dirty: false,
@@ -257,7 +257,8 @@ async function refreshListing(root) {
     }
     if (p.remote.baseName !== f.item.name && !p.dirty) {
       p.remote.baseName = f.item.name;
-      if (p.docs === null) { p.title = f.title; delete p.client; delete p.place; normalizeProject(p); }
+      if (p.docs === null) { p.number = f.number; p.title = f.title; delete p.client; delete p.place; normalizeProject(p); }
+      else if (p.number !== f.number && !findByNumber(f.number)) p.number = f.number; // auf anderem Gerät umnummeriert
     }
     const loc = isActive(p) ? "active" : "archive";
     if (!p.moveTo && loc !== f.loc) moveLocal(p, f.loc);
@@ -437,6 +438,7 @@ function cleanDoc(d) {
 }
 
 function adoptTitle(p, r) {
+  if (r.number && /^\d{5}$/.test(r.number)) p.number = r.number;
   if (!r.title) return;
   p.title = r.title;
   if (typeof r.client === "string") { p.client = r.client; p.place = r.place || ""; }

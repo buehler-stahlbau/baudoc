@@ -2,9 +2,10 @@
    Prüfcode
    - Aus dem Inhalt einer Dokumentation wird ein kurzer Code berechnet
      (SHA-256, die ersten 8 Stellen), z. B. "7F3A-91C2".
-   - In den Code fließen ein: BV-Nummer, Titel, Datum, alle Einträge
-     (Text + Fotos). Nicht enthalten: Anwesende und Unterschriften,
-     Bauherr/Bauort (Stammdaten des BV).
+   - In den Code fließen ein: Titel, Datum, alle Einträge (Text + Fotos)
+     und die interne Kennung der Dokumentation.
+     Nicht enthalten: Anwesende und Unterschriften sowie die Stammdaten
+     des BV (Nummer, Bauherr, Bauort) – diese dürfen korrigiert werden.
    - Jede Unterschrift merkt sich den Code des Stands, zu dem sie
      geleistet wurde. Ändert sich der Inhalt, ist sie ungültig.
 ========================================================= */
@@ -71,7 +72,7 @@ function day(dateLike) {
 // Prüfcode einer Dokumentation, z. B. "7F3A-91C2"
 export function contentCode(p, d) {
   const data = {
-    n: String(p.number || ""),
+    id: String(d.id || ""),
     t: String(d.title || "").trim(),
     dt: day(d.date),
     e: (d.entries || []).map((e) => [String(e.description || "").trim(), (e.images || []).map((i) => i.id)]),
