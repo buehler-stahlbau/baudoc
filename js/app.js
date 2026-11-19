@@ -546,8 +546,8 @@ function renderArchive(app) {
           <div class="muted">${p.place ? h(p.place) + " · " : ""}${count}</div>
         </div>
         <div class="row">
-          <button class="secondary small" data-a="restore" type="button">Wiederherstellen</button>
           <button class="danger-outline small" data-a="delete" type="button">Löschen</button>
+          <button class="secondary small" data-a="restore" type="button">Wiederherstellen</button>
         </div>
       </div>`);
     $('[data-a="restore"]', row).onclick = () => {
@@ -603,8 +603,8 @@ function renderProjectDetail(app, p, d) {
         </div>
       </div>
       <div class="row wrap actions">
-        <button class="primary" id="newD" type="button"><span class="long">+ Neue Dokumentation</span><span class="short">+ Neue Doku</span></button>
         <button class="secondary" id="archP" type="button">Archivieren</button>
+        <button class="primary" id="newD" type="button"><span class="long">+ Neue Dokumentation</span><span class="short">+ Neue Doku</span></button>
       </div>
     </div>`);
   main.appendChild(head);
@@ -803,8 +803,8 @@ function renderDocEditor(container, p, d) {
       <div id="elist"></div>
 
       <div class="row wrap doc-footer">
-        <button class="primary" id="pdfDoc" type="button">PDF erstellen</button>
         <button class="danger-outline" id="delDoc" type="button">Doku löschen</button>
+        <button class="primary" id="pdfDoc" type="button">PDF erstellen</button>
       </div>
     </div>`);
   container.appendChild(card);
@@ -1373,8 +1373,8 @@ function renderSettings(app) {
         Zuletzt synchronisiert: ${s.lastSync ? formatDateTimeDE(s.lastSync) : "–"}<br>
         Ausstehend: ${s.pending}${s.kind === "error" ? `<br><span class="error-text">Fehler: ${h(s.message)}</span>` : ""}</p>
       <div class="row wrap">
-        <button class="primary" id="syncNow" type="button">Jetzt synchronisieren</button>
         <button class="secondary" id="logout" type="button">Abmelden</button>
+        <button class="primary" id="syncNow" type="button">Jetzt synchronisieren</button>
       </div>
       <p class="muted" style="margin:14px 0 6px">Verlorenes Handy, fremder oder gemeinsam genutzter PC?</p>
       <button class="danger-outline" id="wipe" type="button">Abmelden und Daten von diesem Gerät löschen</button>`;

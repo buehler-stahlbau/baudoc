@@ -24,10 +24,10 @@ export function captureSignature({ title = "Unterschrift", subtitle = "", canRem
           <canvas></canvas>
         </div>
         <div class="sig-actions">
-          ${canRemove ? `<button class="danger-outline" data-a="remove" type="button">Unterschrift entfernen</button>` : ""}
+          <button class="secondary" data-a="cancel" type="button">Abbrechen</button>
+          ${canRemove ? `<button class="danger-outline" data-a="remove" type="button">Entfernen</button>` : ""}
           <span class="grow"></span>
           <button class="secondary" data-a="clear" type="button">Neu</button>
-          <button class="secondary" data-a="cancel" type="button">Abbrechen</button>
           <button class="primary" data-a="ok" type="button">Übernehmen</button>
         </div>
       </div>`;
