@@ -332,7 +332,10 @@
     .proto { border: 1px solid var(--brand-gray-200); border-radius: var(--radius); padding: 12px; margin: -4px 0 14px; }
     .proto h4 { margin: 4px 0 8px; font-size: .95rem; }
     .proto h4:not(:first-child) { margin-top: 16px; }
-    .att-row { display: grid; grid-template-columns: 1fr 1fr auto 40px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--brand-gray-100); }
+    /* feste Spalten: Name / Firma / Unterschrift / Entfernen liegen in jeder Zeile exakt übereinander */
+    .att-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 210px 40px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--brand-gray-100); }
+    .att-row .att-sig { min-width: 0; }
+    .att-row .att-sig > button { width: 100%; justify-content: center; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     .att-row:last-child { border-bottom: 0; }
     #attAdd { margin-top: 8px; }
     .att-del { width: 40px; color: var(--brand-gray-500); }
@@ -340,7 +343,7 @@
     .party { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
     .party input { width: 100%; }
     .sig-thumb { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 8px; background: #fff; border: 1px solid var(--brand-gray-200); font-weight: 500; }
-    .sig-thumb img { height: 38px; max-width: 150px; object-fit: contain; display: block; }
+    .sig-thumb img { height: 34px; max-width: 120px; object-fit: contain; display: block; }
     .att-row input { min-height: 38px; padding: 6px 9px; }
     .att-row .sign-btn, .att-row .sig-thumb { min-height: 38px; }
     .proto-status { font-size: .8rem; color: var(--brand-gray-500); margin: -4px 0 6px; }
@@ -359,7 +362,7 @@
     .proto h4 .muted { font-weight: 400; }
     @media (max-width: 600px){
       /* Handy: Name + Firma nebeneinander, darunter Unterschrift und Entfernen */
-      .att-row { grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 0; }
+      .att-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; padding: 8px 0; }
       .att-row .att-sig { grid-column: 1; }
       .att-row .att-del { grid-column: 2; justify-self: end; }
       .sig-thumb img { height: 30px; }
