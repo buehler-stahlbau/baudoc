@@ -15,8 +15,10 @@ export const CONFIG = {
   driveBase: "/me/drive",
   rootFolder: "BauDoc",
   archiveFolder: "_Archiv",
-  usersFolder: "_Nutzer",   // je Nutzer eine Datei mit seinen Favoriten
+  dataFolder: "_daten",     // nur für die App: Inhalte je BV + Favoriten je Nutzer
+  usersFolder: "nutzer",    // Unterordner in _daten: je Nutzer eine Datei mit seinen Favoriten
+  legacyUsersFolder: "_Nutzer", // bis Version 2.8 (wird automatisch umgezogen)
   scopes: ["User.Read", "Files.ReadWrite"],
 };
 
-export const APP_VERSION = "2.8.0-beta";
+export const APP_VERSION = "2.9.0-beta";

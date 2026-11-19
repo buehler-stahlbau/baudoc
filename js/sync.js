@@ -3,8 +3,10 @@
 
    Ablage:
      BauDoc/
+       _daten/                       <- nur für die App
+         bv-<Ordner-ID>.json         <- Texte, Struktur je BV (klein)
+         nutzer/<anmeldename>.json   <- Favoriten je Nutzer
        12345 Neubau Lagerhalle/
-         baudoc.json                 <- Texte, Struktur (klein)
          18.11.2026 Rohbau/
            12345 18.11.2026 Rohbau.pdf
            Bilder/
@@ -29,7 +31,13 @@ import {
 import { sanitizeName, projectLabel, sleep, isoDay } from "./util.js";
 import { makeThumb } from "./images.js";
 
-const PROJECT_FILE = "baudoc.json";
+const LEGACY_PROJECT_FILE = "baudoc.json"; // bis Version 2.8 im BV-Ordner
+
+// Datendatei eines BV in _daten – über die feste OneDrive-ID des BV-Ordners,
+// damit sie auch nach Umbenennen/Umnummerieren/Archivieren passt
+function dataFileName(p) {
+  return `bv-${String(p.remote.folderId || "").replace(/[^A-Za-z0-9_-]/g, "_")}.json`;
+}
 const FOLDER_RE = /^(\d{5})(?:\s+(.*))?$/;
 const TOMBSTONE_MAX_AGE = 180 * 24 * 3600 * 1000;
 
@@ -146,14 +154,17 @@ async function syncAll(full) {
   const st = S.state;
   const root = await od.getRootFolder();
   st.remote.rootId = root.id;
+  const dataDir = await od.ensureFolder(root.id, CONFIG.dataFolder);
 
   for (const id of [...st.remote.pendingFolderDeletes]) {
     await od.deleteItem(id);
+    const df = await od.getChild(dataDir.id, dataFileName({ remote: { folderId: id } }));
+    if (df) await od.deleteItem(df.id);
     st.remote.pendingFolderDeletes = st.remote.pendingFolderDeletes.filter((x) => x !== id);
   }
 
   if (full) await refreshListing(root);
-  if (full || S.state.prefs.dirty) await syncPrefs(root);
+  if (full || S.state.prefs.dirty) await syncPrefs(root, dataDir);
 
   const outbox = await db.outboxAll();
   const sel = st.selectedProjectId;
@@ -167,7 +178,7 @@ async function syncAll(full) {
   let firstError = null;
   for (const p of targets) {
     try {
-      await syncProject(p, root, outbox);
+      await syncProject(p, root, dataDir, outbox);
     } catch (e) {
       if (e && e.authRequired) throw e;
       console.warn(`Sync ${p.number} fehlgeschlagen`, e);
@@ -178,14 +189,28 @@ async function syncAll(full) {
   if (firstError) throw firstError;
 }
 
-/* Favoriten je Nutzer: BauDoc/_Nutzer/<anmeldename>.json */
-async function syncPrefs(root) {
+/* Favoriten je Nutzer: BauDoc/_daten/nutzer/<anmeldename>.json */
+async function syncPrefs(root, dataDir) {
   const acc = od.getAccount();
   if (!acc) return;
   const pr = S.state.prefs;
-  const folder = await od.ensureFolder(root.id, CONFIG.usersFolder);
+  const folder = await od.ensureFolder(dataDir.id, CONFIG.usersFolder);
   const name = sanitizeName(String(acc.username || acc.homeAccountId || "nutzer").toLowerCase()) + ".json";
-  const remote = await od.getJson(folder.id, name);
+  let remote = await od.getJson(folder.id, name);
+
+  // Umzug aus dem alten Ordner BauDoc/_Nutzer (bis Version 2.8)
+  const legacyDir = await od.getChild(root.id, CONFIG.legacyUsersFolder);
+  if (legacyDir) {
+    const legacy = await od.getJson(legacyDir.id, name);
+    if (legacy) {
+      if (!remote) {
+        await od.putJson(folder.id, name, legacy.data, null);
+        remote = await od.getJson(folder.id, name);
+      }
+      await od.deleteItem(legacy.id);
+    }
+    if (!(await od.listChildren(legacyDir.id)).length) await od.deleteItem(legacyDir.id);
+  }
   const remoteAt = (remote && remote.data && remote.data.favUpdatedAt) || 0;
 
   if (remote && remoteAt > (pr.favUpdatedAt || 0)) {
@@ -281,7 +306,7 @@ async function refreshListing(root) {
   }
 }
 
-async function syncProject(p, root, outbox) {
+async function syncProject(p, root, dataDir, outbox) {
   // 1) Projektordner
   if (!p.remote.folderId) {
     const parent = isActive(p) ? root : await ensureArchive(root);
@@ -303,7 +328,13 @@ async function syncProject(p, root, outbox) {
 
   for (let attempt = 0; attempt < 3; attempt++) {
     // 3) Stand aus OneDrive holen und zusammenführen
-    const remote = await od.getJson(p.remote.folderId, PROJECT_FILE);
+    let remote = await od.getJson(dataDir.id, dataFileName(p));
+    let legacy = null;
+    if (!remote) {
+      // bis Version 2.8 lag die Datei als baudoc.json im BV-Ordner -> umziehen
+      legacy = await od.getJson(p.remote.folderId, LEGACY_PROJECT_FILE);
+      if (legacy) remote = { data: legacy.data, eTag: legacy.eTag, id: null };
+    }
     if (remote && remote.eTag !== p.remote.etag) {
       if (p.docs === null) adoptRemote(p, remote.data);
       else await mergeRemote(p, remote.data);
@@ -338,13 +369,14 @@ async function syncProject(p, root, outbox) {
       outboxCount = Math.max(0, outboxCount - 1);
     }
 
-    // 8) baudoc.json schreiben (nur wenn sich etwas geändert hat)
+    // 8) Datendatei in _daten schreiben (nur wenn sich etwas geändert hat oder umgezogen wird)
     const rev = p.rev;
     const json = serialize(p);
-    if (!remote || JSON.stringify(remote.data) !== JSON.stringify(json)) {
-      const res = await od.putJson(p.remote.folderId, PROJECT_FILE, json, remote ? remote.eTag : null);
+    if (!remote || legacy || JSON.stringify(remote.data) !== JSON.stringify(json)) {
+      const res = await od.putJson(dataDir.id, dataFileName(p), json, remote && !legacy ? remote.eTag : null);
       if (res.conflict) continue; // zwischenzeitlich von anderem Gerät geändert -> nochmal
       p.remote.etag = res.eTag;
+      if (legacy) await od.deleteItem(legacy.id); // alte baudoc.json aus dem BV-Ordner entfernen
     } else {
       p.remote.etag = remote.eTag;
     }

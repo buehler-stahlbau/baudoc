@@ -26,13 +26,14 @@ vendor/               jsPDF 2.5.1, MSAL Browser 2.39.0
 
 ```
 BauDoc/
-  12345 Müller GmbH, Altensteig/
-    baudoc.json                      Texte + Struktur
-    18.11.2026 Rohbau/
-      12345 18.11.2026 Rohbau.pdf
-      Bilder/                        Fotos, je max. 1 MB
+  _daten/                            nur für die App – nicht anfassen
+    bv-<Ordner-ID>.json              Texte + Struktur je BV
+    nutzer/<anmeldename>.json        Favoriten je Nutzer
   _Archiv/                           archivierte Bauvorhaben
-  _Nutzer/                           je Nutzer: seine Favoriten
+  12345 Müller GmbH, Altensteig/
+    2026-11-18 Rohbau EG/
+      12345 2026-11-18 Rohbau EG.pdf
+      Bilder/                        Fotos, je max. 1 MB
 ```
 
 - **Favoriten** (★) gehören zum Nutzer (auf all seinen Geräten gleich) und werden
