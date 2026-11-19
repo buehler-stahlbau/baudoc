@@ -119,10 +119,21 @@
     .sync-dot.error { background: var(--brand-red); }
     .sync-dot.off { display: none !important; }
 
-    /* Mittlere Breite: Text bei den Reitern weg, Suchfeld bleibt */
+    /* Feste Breiten: Reiter und Suchfeld ändern sich nicht, egal ob/welche Zahl dabei steht */
+    @media (min-width: 1051px){
+      .tabs .tab { flex: 0 0 auto; justify-content: flex-start; }
+      .tab .cnt { margin-left: auto; }
+      #tabProjects { width: 202px; }
+      #tabFav { width: 172px; }
+      #tabArchive { width: 150px; }
+      #tabSettings { width: 162px; }
+    }
+    /* Mittlere Breite: nur Symbole, Zahl als Abzeichen (wie am Handy) */
     @media (max-width: 1050px){
       .tab .label { display: none; }
-      .tab { padding: 0 11px; }
+      .tab, #searchBtn { width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%; justify-content: center; flex: 0 0 auto; }
+      .tab .cnt { position: absolute; top: -4px; right: -5px; font-size: .68rem; min-width: 18px; line-height: 16px; padding: 0 4px; border: 2px solid #fff; background: var(--brand-gray-700); color: #fff; }
+      .tab.active .cnt { background: var(--brand-red); }
     }
 
     /* App / Handy: nur Symbole */
