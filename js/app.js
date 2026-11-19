@@ -13,6 +13,7 @@ import {
   newProtocol, CONTRACTOR_COMPANY,
 } from "./store.js";
 import { captureSignature } from "./signature.js";
+import { captureFromWebcam, hasWebcam, isMobileDevice } from "./camera.js";
 import { processFile, makeThumb } from "./images.js";
 import { buildPdf, PDF_MAX_BYTES } from "./pdf.js";
 import { exportBackup, importBackup } from "./backup.js";
@@ -148,12 +149,22 @@ function thumbHtml(img, deletable = true) {
 }
 
 // Foto-Knöpfe: Kamera (direkt) + Mediathek/Dateien
+function cameraButton(cls, small) {
+  if (isMobileDevice) {
+    return `<label class="file-btn ${small ? "small" : ""}"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg> Kamera
+        <input class="${cls}" type="file" accept="image/*" capture="environment" />
+      </label>`;
+  }
+  if (hasWebcam()) {
+    return `<button class="file-btn ${small ? "small" : ""}" data-cam="${cls}" type="button"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg> Kamera</button>`;
+  }
+  return "";
+}
+
 function photoButtons(cls, small = false) {
   return `
     <div class="photo-btns">
-      <label class="file-btn camera-only ${small ? "small" : ""}"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg> Kamera
-        <input class="${cls}" type="file" accept="image/*" capture="environment" />
-      </label>
+      ${cameraButton(cls, small)}
       <label class="file-btn ${small ? "small" : ""}"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg> ${isTouch ? "Fotos" : "Fotos hinzufügen"}
         <input class="${cls}" type="file" accept="image/*" multiple />
       </label>
@@ -304,31 +315,34 @@ function matches(p) {
   return q.split(/\s+/).every((w) => hay.includes(w));
 }
 
+const SYNC_ICONS = {
+  idle: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.8"/></svg>',
+  syncing: '<svg class="ico spin" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v4h-4M6 21v-4h4"/></svg>',
+  pending: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.4 1.6A4 4 0 0 1 17 18"/><path d="M12 12v8M9 15l3-3 3 3"/></svg>',
+  offline: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.4 1.6A4 4 0 0 1 17 18H7z"/><path d="M4 4l16 16"/></svg>',
+  error: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5v.01"/></svg>',
+  signedout: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+  off: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="3" width="12" height="18" rx="2"/><path d="M11 18h2"/></svg>',
+};
+
 function updateSyncChip() {
   const chip = $("#syncChip");
   if (!chip) return;
   const s = sync.status;
-  const texts = {
-    off: "Nur lokal",
-    signedout: "Anmelden",
-    syncing: "⟳ Sync …",
-    idle: "✓ Synchron",
-    pending: `⏳ ${s.pending}`,
-    offline: s.pending ? `Offline · ${s.pending}` : "Offline",
-    error: "⚠ Fehler",
-  };
   const titles = {
     off: "Daten liegen nur auf diesem Gerät",
-    signedout: "Mit Microsoft anmelden, um mit OneDrive abzugleichen",
-    syncing: "Abgleich mit OneDrive läuft",
-    idle: "Alles mit OneDrive abgeglichen",
-    pending: `${s.pending} Änderung(en) warten auf Upload – tippen zum Abgleichen`,
+    signedout: "Nicht angemeldet – klicken zum Anmelden",
+    syncing: "Synchronisierung mit OneDrive läuft …",
+    idle: "Alles mit OneDrive synchronisiert",
+    pending: `${s.pending} Änderung(en) warten auf Upload – klicken zum Synchronisieren`,
     offline: "Keine Internetverbindung – Änderungen werden später hochgeladen",
-    error: s.message,
+    error: "Fehler beim Synchronisieren: " + (s.message || ""),
   };
-  chip.textContent = texts[s.kind] || s.kind;
+  chip.innerHTML = SYNC_ICONS[s.kind] || "";
+  if (s.kind === "pending" && s.pending) chip.insertAdjacentHTML("beforeend", `<span class="sync-cnt">${s.pending > 99 ? "99+" : s.pending}</span>`);
   chip.className = "sync-chip " + s.kind;
   chip.title = titles[s.kind] || "";
+  chip.setAttribute("aria-label", titles[s.kind] || "Synchronisierung");
   const dot = $("#syncDot");
   if (dot) dot.className = "sync-dot " + s.kind;
   const set = $("#tabSettings");
@@ -635,7 +649,7 @@ function renderProjectDetail(app, p, d) {
       <div class="doc-item ${d && d.id === doc.id ? "selected" : ""}" data-doc-id="${h(doc.id)}">
         <div class="grow">
           <div class="doc-title">${h(doc.title)}${doc.protocol && doc.protocol.enabled ? ` <span class="badge-abn">Abnahme</span>` : ""}</div>
-          <div class="muted doc-meta">${formatDateDE(doc.date)} · ${doc.entries.length} Einträge · ${n} Fotos</div>
+          <div class="muted doc-meta">${formatDateDE(doc.date)} · ${doc.entries.length} ${doc.entries.length === 1 ? "Eintrag" : "Einträge"} · ${n} ${n === 1 ? "Foto" : "Fotos"}</div>
         </div>
         <button class="secondary small" data-a="pdf" type="button">PDF</button>
       </div>`);
@@ -768,6 +782,16 @@ function renderDocEditor(container, p, d) {
     draftImgs[d.id] = (draftImgs[d.id] || []).concat(ids);
     renderNow();
   }));
+
+  $$('[data-cam="newImg"]', card).forEach((b) => {
+    b.onclick = async () => {
+      const files = await captureFromWebcam();
+      if (!files.length) return;
+      const ids = await processFiles(files);
+      draftImgs[d.id] = (draftImgs[d.id] || []).concat(ids);
+      renderNow();
+    };
+  });
 
   $$("[data-del-img]", $("#draftImages")).forEach((b) => {
     b.onclick = async (e) => {
@@ -1004,6 +1028,19 @@ function renderEntries(container, p, d) {
       renderNow();
     }));
 
+    $$('[data-cam="entryImg"]', c).forEach((b) => {
+      b.onclick = async () => {
+        const files = await captureFromWebcam();
+        if (!files.length) return;
+        const ids = await processFiles(files);
+        const f = findEntry();
+        if (!f) return;
+        f.ce.images.push(...ids.map((id) => ({ id })));
+        touchDoc(f.cp, f.cd);
+        renderNow();
+      };
+    });
+
     container.appendChild(c);
   });
 }
@@ -1191,10 +1228,10 @@ function renderSettings(app) {
     odHtml = `
       <p>Angemeldet als <strong>${h(acc.name || acc.username)}</strong><br><span class="muted">${h(acc.username || "")}</span></p>
       <p class="muted">Ablage: OneDrive › ${h(CONFIG.rootFolder)}<br>
-        Letzter Abgleich: ${s.lastSync ? formatDateTimeDE(s.lastSync) : "–"}<br>
+        Zuletzt synchronisiert: ${s.lastSync ? formatDateTimeDE(s.lastSync) : "–"}<br>
         Ausstehend: ${s.pending}${s.kind === "error" ? `<br><span class="error-text">Fehler: ${h(s.message)}</span>` : ""}</p>
       <div class="row wrap">
-        <button class="primary" id="syncNow" type="button">Jetzt abgleichen</button>
+        <button class="primary" id="syncNow" type="button">Jetzt synchronisieren</button>
         <button class="secondary" id="logout" type="button">Abmelden</button>
       </div>`;
   }
