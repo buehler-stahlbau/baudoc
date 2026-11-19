@@ -352,9 +352,9 @@ export async function buildPdf(p, d, onProgress = () => {}) {
   const created = formatDateTimeDE(new Date());
   for (let n = 1; n <= total; n++) {
     pdf.setPage(n);
+    // Fußzeile nur mit Seitenzahl (Firma, BV und Titel stehen schon im Kopf)
     hair(ML, FOOT_Y - 10, pageWidth - ML);
     font("normal", 7.5, MUTED);
-    pdf.text(`Friedrich Bühler GmbH & Co. KG  ·  BV ${p.number}  ·  ${d.title || "Dokumentation"}`, ML, FOOT_Y, { maxWidth: maxW - 80 });
     pdf.text(`Seite ${n} von ${total}`, pageWidth - ML, FOOT_Y, { align: "right" });
     // Prüfcode dezent senkrecht am linken Rand
     font("normal", 6.5, [170, 170, 166]);
