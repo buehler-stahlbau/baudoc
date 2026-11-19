@@ -4,7 +4,7 @@
    bei fehlendem Netz der zwischengespeicherte Stand.
    Bei jeder neuen Version CACHE hochzählen.
 ========================================================= */
-const CACHE = "baudoc-3.0.0-beta-1";
+const CACHE = "baudoc-3.0.0-beta-2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -15,7 +15,9 @@ const ASSETS = [
   "./icon-maskable-512.png",
   "./apple-touch-icon.png",
   "./favicon.svg",
+  "./favicon-16.png",
   "./favicon-32.png",
+  "./favicon-48.png",
   "./vendor/jspdf.umd.min.js",
   "./vendor/msal-browser.min.js",
   "./vendor/pdf.min.js",
