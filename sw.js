@@ -4,7 +4,7 @@
    bei fehlendem Netz der zwischengespeicherte Stand.
    Bei jeder neuen Version CACHE hochzählen.
 ========================================================= */
-const CACHE = "baudoc-3.1.1-beta-2";
+const CACHE = "baudoc-3.1.1-beta-3";
 const ASSETS = [
   "./",
   "./index.html",

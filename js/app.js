@@ -584,7 +584,7 @@ function renderProjectDetail(app, p, d) {
   const head = el(`
     <div class="card">
       <div class="row">
-        <button id="back" class="icon-btn" type="button" aria-label="Zurück">←</button>
+        <button id="back" class="icon-btn" type="button" aria-label="Zurück"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
         <label class="bv-num-edit grow" title="BV-Nummer ändern">
           <span class="bv-num big">BV</span>
           <input id="projNum" class="bv-num big" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" value="${h(p.number)}" aria-label="BV-Nummer" enterkeyhint="done" />
@@ -769,7 +769,7 @@ function renderDocEditor(container, p, d) {
     <div class="card" id="docEditor">
       <div class="row space-between">
         <h3 class="section-title">Dokumentation</h3>
-        <button class="icon-btn" id="closeDoc" type="button" aria-label="Schließen">✕</button>
+        <button class="icon-btn" id="closeDoc" type="button" aria-label="Schließen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <div class="doc-fields">
         <div class="grow">
@@ -962,7 +962,7 @@ function renderProtocol(box, p, d) {
             <input class="att-name" type="text" placeholder="Name" value="${h(a.name)}" autocomplete="off" />
             <input class="att-company" type="text" placeholder="Firma" value="${h(a.company)}" autocomplete="off" />
             <div class="att-sig">${sigCell(a, contentCode(p, d), "att:" + a.id)}</div>
-            <button class="icon-btn att-del" data-del-att="${h(a.id)}" type="button" aria-label="Person entfernen">×</button>
+            <button class="icon-btn att-del" data-del-att="${h(a.id)}" type="button" aria-label="Person entfernen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
           </div>`).join("")}
       </div>
       <button class="secondary small" id="attAdd" type="button">+ Person hinzufügen</button>
