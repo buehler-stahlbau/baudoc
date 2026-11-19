@@ -17,7 +17,7 @@
 import * as db from "./db.js";
 import { newId, toast } from "./util.js";
 import { dataUrlToBlob, makeThumb } from "./images.js";
-import { contentCode } from "./integrity.js";
+import { contentCode, isSafeSig } from "./integrity.js";
 
 function defaultState() {
   return {
@@ -245,6 +245,7 @@ export function normalizeProtocol(d, p) {
     if (!a.id) a.id = newId();
     a.name = String(a.name ?? "");
     a.company = String(a.company ?? "");
+    if (a.sig && !isSafeSig(a.sig)) { a.sig = null; a.sigAt = null; a.sigCode = null; }
     // Unterschriften aus Version 2.5 und älter: dem aktuellen Stand zuordnen
     if (a.sig && !a.sigCode && p) a.sigCode = code || (code = contentCode(p, d));
   }

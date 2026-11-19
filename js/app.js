@@ -14,7 +14,7 @@ import {
 } from "./store.js";
 import { captureSignature } from "./signature.js";
 import { captureFromWebcam, hasWebcam, isMobileDevice } from "./camera.js";
-import { contentCode, sigValid, validSignatures, normalizeCode } from "./integrity.js";
+import { contentCode, sigValid, validSignatures, normalizeCode, isSafeSig } from "./integrity.js";
 import { processFile, makeThumb } from "./images.js";
 import { buildPdf, PDF_MAX_BYTES } from "./pdf.js";
 import { exportBackup, importBackup } from "./backup.js";
@@ -711,7 +711,7 @@ async function deleteDoc(pid, did) {
   if (!confirm(`Dokumentation „${d.title}“ wirklich löschen?${extra}`)) return;
   p.docs = p.docs.filter((x) => x.id !== did);
   p.deletedDocs.push({ id: did, at: Date.now() });
-  if (d.remote && d.remote.folderId) p.pendingDeletes.push(d.remote.folderId);
+  if (d.remote && d.remote.folderId) p.pendingDeletes.push({ id: d.remote.folderId, parent: p.remote.folderId });
   for (const img of imagesOfDoc(d)) { try { await db.imgDelete(img.id); } catch {} }
   try { await db.outboxDelete(`pdf:${pid}:${did}`); } catch {}
   touchProject(p);
@@ -858,9 +858,9 @@ function renderDocEditor(container, p, d) {
 
 /* ---------- Abnahmeprotokoll: Anwesende + Unterschriften ---------- */
 function sigCell(a, code, key) {
-  if (a.sig && sigValid(a, code)) {
+  if (a.sig && sigValid(a, code) && isSafeSig(a.sig)) {
     return `<button class="sig-thumb" data-sign="${h(key)}" type="button" title="Unterschrift ändern">
-         <img src="${a.sig}" alt="Unterschrift" /><span class="muted">${a.sigAt ? formatDateDE(a.sigAt) : ""}</span>
+         <img src="${h(a.sig)}" alt="Unterschrift" /><span class="muted">${a.sigAt ? formatDateDE(a.sigAt) : ""}</span>
        </button>`;
   }
   if (a.sig) {
@@ -1084,7 +1084,7 @@ function renderEntries(container, p, d) {
       const f = findEntry();
       if (!f) return;
       for (const img of f.ce.images) {
-        if (img.rid) f.cp.pendingDeletes.push(img.rid);
+        if (img.rid) f.cp.pendingDeletes.push({ id: img.rid, parent: (f.cd.remote || {}).bilderId || null });
         try { await db.imgDelete(img.id); } catch {}
       }
       f.cd.entries = f.cd.entries.filter((x) => x.id !== en.id);
@@ -1103,7 +1103,7 @@ function renderEntries(container, p, d) {
         const img = f.ce.images.find((x) => x.id === b.dataset.delImg);
         if (!img) return;
         f.ce.images = f.ce.images.filter((x) => x !== img);
-        if (img.rid) f.cp.pendingDeletes.push(img.rid);
+        if (img.rid) f.cp.pendingDeletes.push({ id: img.rid, parent: (f.cd.remote || {}).bilderId || null });
         try { await db.imgDelete(img.id); } catch {}
         touchDoc(f.cp, f.cd);
         renderNow();
@@ -1269,7 +1269,7 @@ function loadPdfJs() {
 async function renderPdfPages(blob, container) {
   const lib = await loadPdfJs();
   const data = new Uint8Array(await blob.arrayBuffer());
-  const doc = await lib.getDocument({ data }).promise;
+  const doc = await lib.getDocument({ data, isEvalSupported: false }).promise;
   container.innerHTML = "";
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   const cssW = Math.min(container.clientWidth - 16, 900);
@@ -1337,7 +1337,9 @@ function renderSettings(app) {
       <div class="row wrap">
         <button class="primary" id="syncNow" type="button">Jetzt synchronisieren</button>
         <button class="secondary" id="logout" type="button">Abmelden</button>
-      </div>`;
+      </div>
+      <p class="muted" style="margin:14px 0 6px">Verlorenes Handy, fremder oder gemeinsam genutzter PC?</p>
+      <button class="danger-outline" id="wipe" type="button">Abmelden und Daten von diesem Gerät löschen</button>`;
   }
 
   app.appendChild(el(`<div class="page-head"><h1>Einstellungen</h1></div>`));
@@ -1375,6 +1377,17 @@ function renderSettings(app) {
   if (loginBtn) loginBtn.onclick = () => od.login();
   const syncBtn = $("#syncNow");
   if (syncBtn) syncBtn.onclick = async () => { await sync.run({ full: true }); render(); };
+  const wipeBtn = $("#wipe");
+  if (wipeBtn) wipeBtn.onclick = async () => {
+    const pending = sync.status.pending;
+    const warn = pending
+      ? `\n\nACHTUNG: ${pending} Änderung(en) sind noch NICHT in OneDrive und gehen dabei verloren!`
+      : "\n\nIn OneDrive bleibt alles erhalten.";
+    if (!confirm(`Alle BauDoc-Daten von diesem Gerät löschen und abmelden?${warn}`)) return;
+    await resetLocal();
+    try { const dbs = await caches.keys(); await Promise.all(dbs.filter((k) => k.startsWith("baudoc-")).map((k) => caches.delete(k))); } catch {}
+    od.logout();
+  };
   const logoutBtn = $("#logout");
   if (logoutBtn) logoutBtn.onclick = () => {
     if (confirm("Abmelden? Die Daten auf diesem Gerät bleiben erhalten.")) od.logout();

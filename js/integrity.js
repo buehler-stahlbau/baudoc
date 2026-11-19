@@ -87,8 +87,13 @@ export function normalizeCode(input) {
   return hex.length === 8 ? hex.slice(0, 4) + "-" + hex.slice(4) : null;
 }
 
+// Unterschrift muss ein PNG-Bild sein (Schutz gegen eingeschleusten Code)
+export function isSafeSig(sig) {
+  return typeof sig === "string" && sig.length < 2_000_000 && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(sig);
+}
+
 export function sigValid(a, code) {
-  return !!(a && a.sig && a.sigCode === code);
+  return !!(a && isSafeSig(a.sig) && a.sigCode === code);
 }
 
 export function validSignatures(d, code) {

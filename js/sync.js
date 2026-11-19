@@ -352,9 +352,10 @@ async function syncProject(p, root, dataDir, outbox) {
     for (const d of p.docs) await syncDoc(p, d);
 
     // 6) Gelöschtes in OneDrive entfernen (-> Papierkorb)
-    for (const id of [...p.pendingDeletes]) {
-      await od.deleteItem(id);
-      p.pendingDeletes = p.pendingDeletes.filter((x) => x !== id);
+    for (const job of [...p.pendingDeletes]) {
+      if (typeof job === "string") await od.deleteItem(job); // ältere Version (lokal erzeugt)
+      else if (job && job.id && job.parent) await od.deleteItemIn(job.id, job.parent);
+      p.pendingDeletes = p.pendingDeletes.filter((x) => x !== job);
     }
 
     // 7) PDFs ablegen
@@ -394,13 +395,29 @@ export function docFolderName(d) {
   return sanitizeName(`${isNaN(dt) ? "" : isoDay(dt) + " "}${d.title || "Dokumentation"}`);
 }
 
+const verifiedIds = new Set(); // in dieser Sitzung geprüfte Ordner
+
+async function verifyDocFolders(p, d) {
+  const r = d.remote || {};
+  if (r.folderId && !verifiedIds.has(r.folderId)) {
+    if (await od.isChildOf(r.folderId, p.remote.folderId)) verifiedIds.add(r.folderId);
+    else { console.warn("Doku-Ordner gehört nicht zum BV – wird neu angelegt", d.id); d.remote = {}; return; }
+  }
+  if (r.bilderId && !verifiedIds.has(r.bilderId)) {
+    if (await od.isChildOf(r.bilderId, r.folderId)) verifiedIds.add(r.bilderId);
+    else d.remote.bilderId = null;
+  }
+}
+
 async function syncDoc(p, d, retry = true) {
   if (!d.remote) d.remote = {};
+  await verifyDocFolders(p, d);
   const want = docFolderName(d);
   try {
     if (!d.remote.folderId) {
       const f = await od.createFolder(p.remote.folderId, want, "rename");
       d.remote = { folderId: f.id, baseName: want, bilderId: null };
+      verifiedIds.add(f.id);
     } else if (d.remote.baseName !== want) {
       await od.renameItem(d.remote.folderId, want);
       d.remote.baseName = want;
@@ -411,6 +428,7 @@ async function syncDoc(p, d, retry = true) {
     if (!d.remote.bilderId) {
       const b = await od.ensureFolder(d.remote.folderId, "Bilder");
       d.remote.bilderId = b.id;
+      verifiedIds.add(b.id);
     }
     for (const img of todo) {
       const rec = await db.imgGet(img.id);

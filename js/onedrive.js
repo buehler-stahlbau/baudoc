@@ -105,6 +105,13 @@ async function gjson(path, opts) {
 }
 
 const D = () => CONFIG.driveBase;
+
+// OneDrive-Kennungen kommen teils aus Datendateien -> nur gültige Zeichen zulassen
+function iid(id) {
+  const v = String(id ?? "");
+  if (!/^[A-Za-z0-9!._-]{1,200}$/.test(v)) throw new GraphError(400, "Ungültige OneDrive-Kennung");
+  return encodeURIComponent(v);
+}
 const enc = (name) => encodeURIComponent(name);
 const encPath = (p) => p.split("/").map(encodeURIComponent).join("/");
 const JSON_HDR = { "Content-Type": "application/json" };
@@ -118,14 +125,14 @@ export async function getByPath(path) {
 }
 
 export async function getChild(parentId, name) {
-  const res = await gfetch(`${D()}/items/${parentId}:/${enc(name)}`);
+  const res = await gfetch(`${D()}/items/${iid(parentId)}:/${enc(name)}`);
   if (res.ok) return res.json();
   if (res.status === 404) return null;
   throw await toError(res);
 }
 
 export async function createFolder(parentId, name, conflict = "fail") {
-  const url = parentId ? `${D()}/items/${parentId}/children` : `${D()}/root/children`;
+  const url = parentId ? `${D()}/items/${iid(parentId)}/children` : `${D()}/root/children`;
   const res = await gfetch(url, {
     method: "POST",
     headers: JSON_HDR,
@@ -148,7 +155,7 @@ export async function getRootFolder() {
 }
 
 export async function listChildren(itemId) {
-  let url = `${D()}/items/${itemId}/children?$select=id,name,folder,file,eTag&$top=999`;
+  let url = `${D()}/items/${iid(itemId)}/children?$select=id,name,folder,file,eTag&$top=999`;
   const out = [];
   while (url) {
     const j = await gjson(url);
@@ -161,7 +168,7 @@ export async function listChildren(itemId) {
 export async function renameItem(itemId, name) {
   for (let i = 0; i < 5; i++) {
     const n = i ? `${name} (${i + 1})` : name;
-    const res = await gfetch(`${D()}/items/${itemId}`, { method: "PATCH", headers: JSON_HDR, body: JSON.stringify({ name: n }) });
+    const res = await gfetch(`${D()}/items/${iid(itemId)}`, { method: "PATCH", headers: JSON_HDR, body: JSON.stringify({ name: n }) });
     if (res.ok) return res.json();
     if (res.status !== 409) throw await toError(res);
   }
@@ -169,12 +176,12 @@ export async function renameItem(itemId, name) {
 }
 
 export async function moveItem(itemId, parentId) {
-  let res = await gfetch(`${D()}/items/${itemId}`, {
+  let res = await gfetch(`${D()}/items/${iid(itemId)}`, {
     method: "PATCH", headers: JSON_HDR, body: JSON.stringify({ parentReference: { id: parentId } }),
   });
   if (res.status === 409) {
-    const item = await gjson(`${D()}/items/${itemId}`);
-    res = await gfetch(`${D()}/items/${itemId}`, {
+    const item = await gjson(`${D()}/items/${iid(itemId)}`);
+    res = await gfetch(`${D()}/items/${iid(itemId)}`, {
       method: "PATCH", headers: JSON_HDR,
       body: JSON.stringify({ parentReference: { id: parentId }, name: `${item.name} (${Date.now() % 10000})` }),
     });
@@ -183,9 +190,35 @@ export async function moveItem(itemId, parentId) {
   return res.json();
 }
 
+export async function getItem(itemId) {
+  const res = await gfetch(`${D()}/items/${iid(itemId)}?$select=id,name,parentReference`);
+  if (res.ok) return res.json();
+  if (res.status === 404) return null;
+  throw await toError(res);
+}
+
+// Nur ausführen, wenn das Element wirklich im erwarteten Ordner liegt
+// (Schutz gegen manipulierte Datendateien)
+export async function isChildOf(itemId, parentId) {
+  if (!itemId || !parentId) return false;
+  const it = await getItem(itemId);
+  return !!(it && it.parentReference && it.parentReference.id === parentId);
+}
+
+export async function deleteItemIn(itemId, parentId) {
+  const it = await getItem(itemId);
+  if (!it) return true; // schon weg
+  if (!it.parentReference || it.parentReference.id !== parentId) {
+    console.warn("Löschen verweigert: Element liegt nicht im erwarteten Ordner", itemId);
+    return false;
+  }
+  await deleteItem(itemId);
+  return true;
+}
+
 // Gelöschtes landet im OneDrive-Papierkorb
 export async function deleteItem(itemId) {
-  const res = await gfetch(`${D()}/items/${itemId}`, { method: "DELETE" });
+  const res = await gfetch(`${D()}/items/${iid(itemId)}`, { method: "DELETE" });
   if (res.ok || res.status === 404) return;
   throw await toError(res);
 }
@@ -193,7 +226,7 @@ export async function deleteItem(itemId) {
 /* ---------- Dateien ---------- */
 export async function uploadFile(parentId, name, blob, contentType = "application/octet-stream") {
   if (blob.size <= SMALL_UPLOAD_MAX) {
-    const res = await gfetch(`${D()}/items/${parentId}:/${enc(name)}:/content`, {
+    const res = await gfetch(`${D()}/items/${iid(parentId)}:/${enc(name)}:/content`, {
       method: "PUT", headers: { "Content-Type": contentType }, body: blob,
     });
     if (!res.ok) throw await toError(res);
@@ -203,7 +236,7 @@ export async function uploadFile(parentId, name, blob, contentType = "applicatio
 }
 
 async function uploadLarge(parentId, name, blob) {
-  const session = await gjson(`${D()}/items/${parentId}:/${enc(name)}:/createUploadSession`, {
+  const session = await gjson(`${D()}/items/${iid(parentId)}:/${enc(name)}:/createUploadSession`, {
     method: "POST", headers: JSON_HDR,
     body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "replace" } }),
   });
@@ -235,7 +268,7 @@ async function uploadLarge(parentId, name, blob) {
 
 async function fetchContent(item) {
   const url = item["@microsoft.graph.downloadUrl"];
-  const res = url ? await fetch(url, { cache: "no-store" }) : await gfetch(`${D()}/items/${item.id}/content`);
+  const res = url ? await fetch(url, { cache: "no-store" }) : await gfetch(`${D()}/items/${iid(item.id)}/content`);
   if (!res.ok) throw await toError(res);
   return res;
 }
@@ -251,7 +284,7 @@ export async function getJson(parentId, name) {
 export async function putJson(parentId, name, obj, eTag) {
   const headers = { "Content-Type": "application/json" };
   if (eTag) headers["If-Match"] = eTag;
-  const res = await gfetch(`${D()}/items/${parentId}:/${enc(name)}:/content`, {
+  const res = await gfetch(`${D()}/items/${iid(parentId)}:/${enc(name)}:/content`, {
     method: "PUT", headers, body: JSON.stringify(obj, null, 1),
   });
   if (res.status === 412) return { conflict: true };
@@ -261,14 +294,14 @@ export async function putJson(parentId, name, obj, eTag) {
 }
 
 export async function downloadBlob(itemId) {
-  const item = await gjson(`${D()}/items/${itemId}`);
+  const item = await gjson(`${D()}/items/${iid(itemId)}`);
   const res = await fetchContent(item);
   return res.blob();
 }
 
 // Vorschaubild direkt von OneDrive (spart Datenvolumen)
 export async function thumbnail(itemId) {
-  const j = await gjson(`${D()}/items/${itemId}/thumbnails/0/medium`);
+  const j = await gjson(`${D()}/items/${iid(itemId)}/thumbnails/0/medium`);
   try {
     const res = await fetch(j.url);
     if (res.ok) return { blob: await res.blob() };

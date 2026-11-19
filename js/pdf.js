@@ -8,7 +8,7 @@ import * as db from "./db.js";
 import * as od from "./onedrive.js";
 import { toPdfImage } from "./images.js";
 import { formatDateDE, formatDateTimeDE, sanitizeName, isoDay } from "./util.js";
-import { contentCode, sigValid } from "./integrity.js";
+import { contentCode, sigValid, isSafeSig } from "./integrity.js";
 import { imagesOfDoc } from "./store.js";
 
 export const PDF_MAX_BYTES = 15 * 1024 * 1024;
@@ -57,6 +57,25 @@ async function sourceBlob(img) {
   return (rec && rec.thumb) || null; // Notlösung: Vorschaubild
 }
 
+/* Die PDF-Standardschrift kann nur den westeuropäischen Zeichensatz (Windows-1252).
+   Emojis und Sonderzeichen außerhalb davon würden als Zeichensalat erscheinen. */
+const CP1252_EXTRA = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ";
+const PDF_MAP = {
+  "→": "->", "←": "<-", "↑": "^", "↓": "v", "⇒": "=>", "≤": "<=", "≥": ">=", "≠": "!=", "≈": "~",
+  "✓": "(ok)", "✔": "(ok)", "✗": "(x)", "✘": "(x)", "Ω": "Ohm", "∅": "Ø", "−": "-", "‑": "-",
+  "\u00A0": " ", "\u2009": " ", "\u202F": " ", "\u2007": " ",
+};
+export function pdfSafe(text) {
+  let out = "";
+  for (const ch of String(text ?? "")) {
+    const c = ch.codePointAt(0);
+    if (ch === "\n" || ch === "\t" || (c >= 0x20 && c <= 0x7e) || (c >= 0xa0 && c <= 0xff) || CP1252_EXTRA.includes(ch)) out += ch;
+    else if (PDF_MAP[ch]) out += PDF_MAP[ch];
+    // alles andere (z. B. Emojis) entfällt
+  }
+  return out.replace(/ {2,}/g, " ");
+}
+
 export function pdfFilename(p, d) {
   const dt = new Date(d.date);
   const day = isNaN(dt) ? "" : isoDay(dt) + " ";
@@ -103,6 +122,11 @@ export async function buildPdf(p, d, onProgress = () => {}) {
   await ensureLogo();
 
   const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true });
+  // alle Texte automatisch auf darstellbare Zeichen umstellen
+  const _text = pdf.text.bind(pdf);
+  pdf.text = (t, ...rest) => _text(Array.isArray(t) ? t.map(pdfSafe) : pdfSafe(t), ...rest);
+  const _split = pdf.splitTextToSize.bind(pdf);
+  pdf.splitTextToSize = (t, ...rest) => _split(pdfSafe(t), ...rest);
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
 
@@ -178,6 +202,13 @@ export async function buildPdf(p, d, onProgress = () => {}) {
   y += 21 * 1.15 * (titleLines.length - 1) + 16;
 
   // Infokasten: BV-Nr. | Bauherr | Bauort | Datum
+  // Zeilen begrenzen; gekürzter Text bekommt "…"
+  const clamp = (lines, n) => {
+    if (lines.length <= n) return lines;
+    const out = lines.slice(0, n);
+    out[n - 1] = out[n - 1].replace(/[\s,;:–-]*$/, "") + " …";
+    return out;
+  };
   const fields = [
     ["BV-NR.", p.number, 0.15],
     ["BAUHERR / AUFTRAGGEBER", p.client || p.title || "–", 0.37],
@@ -187,7 +218,7 @@ export async function buildPdf(p, d, onProgress = () => {}) {
   const padX = 12;
   const innerW = maxW - 2 * padX;
   font("normal", 10.5, DARK);
-  const valLines = fields.map(([, v, w]) => pdf.splitTextToSize(String(v), innerW * w - 10).slice(0, 2));
+  const valLines = fields.map(([, v, w]) => clamp(pdf.splitTextToSize(String(v), innerW * w - 10), 3));
   const boxH = 30 + Math.max(...valLines.map((l) => l.length)) * 13;
   pdf.setFillColor(SOFT[0], SOFT[1], SOFT[2]);
   pdf.setDrawColor(LINE[0], LINE[1], LINE[2]);
@@ -215,7 +246,7 @@ export async function buildPdf(p, d, onProgress = () => {}) {
 
   // Unterschrift (PNG) in einen Rahmen einpassen
   async function drawSig(sig, x, top, boxW, boxH2) {
-    if (!sig) return;
+    if (!isSafeSig(sig)) return;
     try {
       const dim = await new Promise((resolve) => {
         const im = new Image();
@@ -250,8 +281,8 @@ export async function buildPdf(p, d, onProgress = () => {}) {
     for (const a of attendees) {
       if (y + rowH > BOTTOM) { newPage(); tableHead(); }
       font("normal", 10, DARK);
-      const nameL = pdf.splitTextToSize(a.name || "", colW[0] - 14).slice(0, 2);
-      const compL = pdf.splitTextToSize(a.company || "", colW[1] - 14).slice(0, 2);
+      const nameL = clamp(pdf.splitTextToSize(a.name || "", colW[0] - 14), 2);
+      const compL = clamp(pdf.splitTextToSize(a.company || "", colW[1] - 14), 2);
       const mid = y + rowH / 2 + 3.5;
       pdf.text(nameL, ML + 8, mid - (nameL.length > 1 ? 6 : 0), { lineHeightFactor: 1.2 });
       font("normal", 10, GRAY);
