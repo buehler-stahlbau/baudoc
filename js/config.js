@@ -19,4 +19,4 @@ export const CONFIG = {
   scopes: ["User.Read", "Files.ReadWrite"],
 };
 
-export const APP_VERSION = "2.5.0-beta";
+export const APP_VERSION = "2.6.0-beta";

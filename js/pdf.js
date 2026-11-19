@@ -7,7 +7,8 @@
 import * as db from "./db.js";
 import * as od from "./onedrive.js";
 import { toPdfImage } from "./images.js";
-import { formatDateDE, sanitizeName, isoDay } from "./util.js";
+import { formatDateDE, formatDateTimeDE, sanitizeName, isoDay } from "./util.js";
+import { contentCode, sigValid } from "./integrity.js";
 import { imagesOfDoc } from "./store.js";
 
 export const PDF_MAX_BYTES = 15 * 1024 * 1024;
@@ -64,6 +65,7 @@ export function pdfFilename(p, d) {
 }
 
 export async function buildPdf(p, d, onProgress = () => {}) {
+  const code = contentCode(p, d);
   if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("PDF-Bibliothek nicht geladen");
   const { jsPDF } = window.jspdf;
 
@@ -211,7 +213,8 @@ export async function buildPdf(p, d, onProgress = () => {}) {
       const mid = y + rowH / 2 + 4;
       pdf.text(pdf.splitTextToSize(a.name || "", colW[0] - 8).slice(0, 2), margin, mid - (a.name && pdf.splitTextToSize(a.name, colW[0] - 8).length > 1 ? 6 : 0));
       pdf.text(pdf.splitTextToSize(a.company || "", colW[1] - 8).slice(0, 2), margin + colW[0], mid - (a.company && pdf.splitTextToSize(a.company, colW[1] - 8).length > 1 ? 6 : 0));
-      await drawSig(a.sig, margin + colW[0] + colW[1], y + 3, colW[2] - 6, rowH - 6);
+      // nur Unterschriften, die zum aktuellen Inhalt gehören
+      if (sigValid(a, code)) await drawSig(a.sig, margin + colW[0] + colW[1], y + 3, colW[2] - 6, rowH - 6);
       y += rowH;
       pdf.setDrawColor(210);
       pdf.line(margin, y, margin + maxW, y);
@@ -282,9 +285,13 @@ export async function buildPdf(p, d, onProgress = () => {}) {
     pdf.setFontSize(9);
     pdf.setTextColor(90);
     pdf.text(`Seite ${n} von ${total}`, pageWidth - margin, pageHeight - 20, { align: "right" });
+    // Prüfcode dezent senkrecht am linken Rand
+    pdf.setFontSize(6.5);
+    pdf.setTextColor(165);
+    pdf.text(`BauDoc · Prüfcode ${code} · erstellt ${formatDateTimeDE(new Date())}`, 20, pageHeight - margin, { angle: 90 });
     pdf.setTextColor(0);
   }
 
   const blob = pdf.output("blob");
-  return { blob, filename: pdfFilename(p, d), missing };
+  return { blob, filename: pdfFilename(p, d), missing, code };
 }

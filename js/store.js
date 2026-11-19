@@ -17,6 +17,7 @@
 import * as db from "./db.js";
 import { newId, toast } from "./util.js";
 import { dataUrlToBlob, makeThumb } from "./images.js";
+import { contentCode } from "./integrity.js";
 
 function defaultState() {
   return {
@@ -212,15 +213,19 @@ export function newProject(number, client, place) {
    sig = PNG als DataURL, sigAt = Zeitpunkt der Unterschrift */
 export const CONTRACTOR_COMPANY = "Friedrich Bühler GmbH & Co. KG";
 
-export function normalizeProtocol(d) {
+export function normalizeProtocol(d, p) {
+  if (!Array.isArray(d.pdfCodes)) d.pdfCodes = [];
   if (!d.protocol || typeof d.protocol !== "object") return;
   const pr = d.protocol;
   pr.enabled = !!pr.enabled;
   if (!Array.isArray(pr.attendees)) pr.attendees = [];
+  let code = null;
   for (const a of pr.attendees) {
     if (!a.id) a.id = newId();
     a.name = String(a.name ?? "");
     a.company = String(a.company ?? "");
+    // Unterschriften aus Version 2.5 und älter: dem aktuellen Stand zuordnen
+    if (a.sig && !a.sigCode && p) a.sigCode = code || (code = contentCode(p, d));
   }
   for (const k of ["contractor", "client"]) {
     if (!pr[k] || typeof pr[k] !== "object") pr[k] = { name: "" };
@@ -256,7 +261,7 @@ export function normalizeProject(p) {
   for (const d of p.docs || []) {
     if (!d.remote || typeof d.remote !== "object") d.remote = {};
     if (!Array.isArray(d.entries)) d.entries = [];
-    normalizeProtocol(d);
+    normalizeProtocol(d, p);
     for (const e of d.entries) {
       if (!e.id) e.id = newId();
       if (typeof e.description !== "string") e.description = String(e.description ?? "");

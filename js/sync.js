@@ -412,6 +412,7 @@ function serialize(p) {
       date: d.date,
       updatedAt: d.updatedAt || 0,
       protocol: d.protocol || null,
+      pdfCodes: d.pdfCodes || [],
       remote: {
         folderId: d.remote?.folderId || null,
         baseName: d.remote?.baseName || null,

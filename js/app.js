@@ -14,6 +14,7 @@ import {
 } from "./store.js";
 import { captureSignature } from "./signature.js";
 import { captureFromWebcam, hasWebcam, isMobileDevice } from "./camera.js";
+import { contentCode, sigValid, validSignatures, normalizeCode } from "./integrity.js";
 import { processFile, makeThumb } from "./images.js";
 import { buildPdf, PDF_MAX_BYTES } from "./pdf.js";
 import { exportBackup, importBackup } from "./backup.js";
@@ -424,7 +425,7 @@ function projectRow(p) {
   const pend = p.dirty && od.isConfigured() ? ` <span class="muted" title="Noch nicht hochgeladen">⏳</span>` : "";
   const row = el(`
     <div class="project-item ${justAdded === p.id ? "flash" : ""}" data-pid="${h(p.id)}">
-      <button class="fav-btn ${p.fav ? "is-fav" : ""}" type="button" data-a="fav" aria-label="Favorit umschalten">${p.fav ? "★" : "☆"}</button>
+      <button class="fav-btn ${p.fav ? "is-fav" : ""}" type="button" data-a="fav" aria-label="Favorit umschalten"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.8 5.9 6.2.7-4.6 4.3 1.2 6.1L12 17l-5.6 3 1.2-6.1L3 9.6l6.2-.7z"/></svg></button>
       <div class="p-info">
         <div class="p-title"><span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}</div>
         ${p.place ? `<div class="p-place">${h(p.place)}</div>` : ""}
@@ -553,7 +554,7 @@ function renderProjectDetail(app, p, d) {
       <div class="row">
         <button id="back" class="icon-btn" type="button" aria-label="Zurück">←</button>
         <span class="bv-num big grow">BV ${h(p.number)}</span>
-        <button class="fav-btn ${p.fav ? "is-fav" : ""}" id="favD" type="button" aria-label="Favorit umschalten">${p.fav ? "★" : "☆"}</button>
+        <button class="fav-btn ${p.fav ? "is-fav" : ""}" id="favD" type="button" aria-label="Favorit umschalten"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.8 5.9 6.2.7-4.6 4.3 1.2 6.1L12 17l-5.6 3 1.2-6.1L3 9.6l6.2-.7z"/></svg></button>
       </div>
       <div class="bv-fields">
         <div>
@@ -748,6 +749,7 @@ function renderDocEditor(container, p, d) {
   $("#delDoc").onclick = () => deleteDoc(p.id, d.id);
 
   const titleEl = $("#docTitle");
+  guardTyping(titleEl);
   titleEl.addEventListener("input", () => {
     const v = titleEl.value.trim().replace(/\s+/g, " ");
     if (!v) return;
@@ -755,6 +757,7 @@ function renderDocEditor(container, p, d) {
     if (!cd || cd.id !== d.id || cd.title === v) return;
     cd.title = v;
     touchDoc(cp, cd);
+    updateProtoStatus();
     const rowTitle = $(`[data-doc-id="${CSS.escape(d.id)}"] .doc-title`);
     if (rowTitle) rowTitle.textContent = v;
   });
@@ -763,6 +766,7 @@ function renderDocEditor(container, p, d) {
 
   $("#docDate").addEventListener("change", (e) => {
     const v = e.target.value;
+    if (guardContentEdit() === false) { e.target.value = toDateInput(d.date); return; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
     const { p: cp, d: cd } = ctx();
     if (!cd) return;
@@ -823,12 +827,59 @@ function renderDocEditor(container, p, d) {
 }
 
 /* ---------- Abnahmeprotokoll: Anwesende + Unterschriften ---------- */
-function sigCell(sig, sigAt, key) {
-  return sig
-    ? `<button class="sig-thumb" data-sign="${h(key)}" type="button" title="Unterschrift ändern">
-         <img src="${sig}" alt="Unterschrift" /><span class="muted">${sigAt ? formatDateDE(sigAt) : ""}</span>
-       </button>`
-    : `<button class="secondary small sign-btn" data-sign="${h(key)}" type="button"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21c3-1 5-4 7-4s1 3 4 3 4-3 7-3"/><path d="M14.5 4.5l3 3L9 16l-4 1 1-4z"/></svg> Unterschreiben</button>`;
+function sigCell(a, code, key) {
+  if (a.sig && sigValid(a, code)) {
+    return `<button class="sig-thumb" data-sign="${h(key)}" type="button" title="Unterschrift ändern">
+         <img src="${a.sig}" alt="Unterschrift" /><span class="muted">${a.sigAt ? formatDateDE(a.sigAt) : ""}</span>
+       </button>`;
+  }
+  if (a.sig) {
+    return `<button class="secondary small sign-btn sig-invalid" data-sign="${h(key)}" type="button" title="Inhalt wurde nach der Unterschrift geändert"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21c3-1 5-4 7-4s1 3 4 3 4-3 7-3"/><path d="M14.5 4.5l3 3L9 16l-4 1 1-4z"/></svg> Ungültig – neu unterschreiben</button>`;
+  }
+  return `<button class="secondary small sign-btn" data-sign="${h(key)}" type="button"><svg class="ico ico-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21c3-1 5-4 7-4s1 3 4 3 4-3 7-3"/><path d="M14.5 4.5l3 3L9 16l-4 1 1-4z"/></svg> Unterschreiben</button>`;
+}
+
+// Status über den Anwesenden: Prüfcode + Anzahl Unterschriften
+function protoStatusHtml(p, d) {
+  const code = contentCode(p, d);
+  const named = d.protocol.attendees.filter((a) => a.name.trim());
+  const signed = validSignatures(d, code).length;
+  return `Prüfcode <strong>${code}</strong> · ${signed} von ${named.length} unterschrieben`;
+}
+function updateProtoStatus() {
+  const { p, d } = ctx();
+  const elS = $("#protoStatus");
+  if (elS && p && d && d.protocol && d.protocol.enabled) elS.innerHTML = protoStatusHtml(p, d);
+}
+
+/* Inhalt ändern, obwohl schon unterschrieben wurde?
+   Rückgabe: false = abgebrochen, "ok" = keine Unterschriften betroffen,
+   "cleared" = bestätigt, Unterschriften wurden entfernt */
+function guardContentEdit() {
+  const { p, d } = ctx();
+  if (!p || !d || !d.protocol || !d.protocol.enabled) return "ok";
+  const valid = validSignatures(d, contentCode(p, d));
+  if (!valid.length) return "ok";
+  const names = valid.map((a) => a.name).filter(Boolean).join(", ");
+  const ok = confirm(
+    `Dieses Protokoll wurde bereits unterschrieben (${valid.length}${names ? ": " + names : ""}).\n\n` +
+    `Wenn du den Inhalt änderst, werden diese Unterschriften ungültig und müssen neu geleistet werden.\n\n` +
+    `Trotzdem ändern?`
+  );
+  if (!ok) return false;
+  for (const a of d.protocol.attendees) { a.sig = null; a.sigAt = null; a.sigCode = null; }
+  touchDoc(p, d);
+  const box = $("#protoBox");
+  if (box) { box.innerHTML = ""; renderProtocol(box, p, d); }
+  toast("Unterschriften entfernt – bitte nach der Änderung neu unterschreiben lassen.", "warn", 5000);
+  return "cleared";
+}
+
+// Tippen in ein Inhaltsfeld: vorher prüfen
+function guardTyping(field) {
+  field.addEventListener("beforeinput", (e) => {
+    if (guardContentEdit() === false) e.preventDefault();
+  });
 }
 
 function renderProtocol(box, p, d) {
@@ -836,12 +887,13 @@ function renderProtocol(box, p, d) {
   box.appendChild(el(`
     <div class="proto">
       <h4>Anwesende</h4>
+      <div class="proto-status" id="protoStatus">${protoStatusHtml(p, d)}</div>
       <div id="attList">
         ${pr.attendees.map((a) => `
           <div class="att-row" data-att="${h(a.id)}">
             <input class="att-name" type="text" placeholder="Name" value="${h(a.name)}" autocomplete="off" />
             <input class="att-company" type="text" placeholder="Firma" value="${h(a.company)}" autocomplete="off" />
-            <div class="att-sig">${sigCell(a.sig, a.sigAt, "att:" + a.id)}</div>
+            <div class="att-sig">${sigCell(a, contentCode(p, d), "att:" + a.id)}</div>
             <button class="icon-btn att-del" data-del-att="${h(a.id)}" type="button" aria-label="Person entfernen">×</button>
           </div>`).join("")}
       </div>
@@ -911,6 +963,7 @@ function renderProtocol(box, p, d) {
       if (res === undefined) return;
       target.sig = res;
       target.sigAt = res ? Date.now() : null;
+      target.sigCode = res ? contentCode(c.cp, c.cd) : null; // Unterschrift gilt für genau diesen Stand
       touchDoc(c.cp, c.cd);
       renderNow();
     };
@@ -947,6 +1000,7 @@ async function addEntry() {
     toast("Bitte Beschreibung eingeben oder Fotos hinzufügen.", "warn");
     return;
   }
+  if (guardContentEdit() === false) return;
   d.entries.push({ id: newId(), description: text, images: imgs.map((id) => ({ id })) });
   drafts[d.id] = "";
   draftImgs[d.id] = [];
@@ -980,15 +1034,23 @@ function renderEntries(container, p, d) {
     };
 
     const ta = $(".entryText", c);
+    guardTyping(ta);
+    // Fotos zu einem Eintrag hinzufügen ändert den Inhalt -> vorher prüfen
+    $$(".photo-btns .file-btn", c).forEach((btn) => btn.addEventListener("click", (e) => {
+      if (guardContentEdit() === false) { e.preventDefault(); e.stopImmediatePropagation(); }
+    }, true));
     ta.addEventListener("input", () => {
       const f = findEntry();
       if (!f) return;
       f.ce.description = ta.value;
       touchDoc(f.cp, f.cd);
+      updateProtoStatus();
     });
 
     $('[data-a="del-entry"]', c).onclick = async () => {
-      if (!confirm(`Eintrag ${i + 1} wirklich löschen?`)) return;
+      const g = guardContentEdit();
+      if (g === false) return;
+      if (g === "ok" && !confirm(`Eintrag ${i + 1} wirklich löschen?`)) return;
       const f = findEntry();
       if (!f) return;
       for (const img of f.ce.images) {
@@ -1003,7 +1065,9 @@ function renderEntries(container, p, d) {
     $$("[data-del-img]", c).forEach((b) => {
       b.onclick = async (e) => {
         e.stopPropagation();
-        if (!confirm("Foto löschen?")) return;
+        const g = guardContentEdit();
+        if (g === false) return;
+        if (g === "ok" && !confirm("Foto löschen?")) return;
         const f = findEntry();
         if (!f) return;
         const img = f.ce.images.find((x) => x.id === b.dataset.delImg);
@@ -1064,7 +1128,17 @@ async function exportPdf(pid, did) {
   await saveNow();
   setBusy("PDF wird erstellt …");
   try {
-    const { blob, filename, missing } = await buildPdf(p, d, (m) => setBusy(m));
+    const { blob, filename, missing, code } = await buildPdf(p, d, (m) => setBusy(m));
+    // erzeugte Prüfcodes merken (für "Prüfcode prüfen")
+    if (!Array.isArray(d.pdfCodes)) d.pdfCodes = [];
+    const last = d.pdfCodes[d.pdfCodes.length - 1];
+    if (!last || last.code !== code) {
+      d.pdfCodes.push({ code, at: Date.now() });
+      if (d.pdfCodes.length > 30) d.pdfCodes.splice(0, d.pdfCodes.length - 30);
+      p.rev = (p.rev || 0) + 1;
+      p.dirty = true;
+      saveSoon();
+    }
     const what = d.protocol && d.protocol.enabled ? "Abnahmeprotokoll" : "Dokumentation";
     openPdfPreview(blob, filename, `BV ${p.number}${p.client ? " " + p.client : ""} – ${what} „${d.title}“ vom ${formatDateDE(d.date)}`);
     if (missing) toast(`${missing} Foto(s) konnten nicht geladen werden (offline?).`, "warn", 7000);
@@ -1241,6 +1315,16 @@ function renderSettings(app) {
   app.appendChild(el(`<div class="card"><h3 class="section-title">App</h3>${installHtml()}</div>`));
   app.appendChild(el(`
     <div class="card">
+      <h3 class="section-title">Prüfcode prüfen</h3>
+      <p class="muted">Den Code von einem BauDoc-PDF eingeben (steht links am Seitenrand).</p>
+      <div class="check-row">
+        <input id="chkCode" type="text" placeholder="z. B. 7F3A-91C2" autocomplete="off" autocapitalize="characters" enterkeyhint="done" />
+        <button class="primary" id="chkBtn" type="button">Prüfen</button>
+      </div>
+      <div id="chkResult" class="check-result"></div>
+    </div>`));
+  app.appendChild(el(`
+    <div class="card">
       <h3 class="section-title">Datensicherung</h3>
       <p class="muted">Speichert alle Bauvorhaben und alle Fotos, die auf diesem Gerät liegen, in eine Datei.</p>
       <div class="row wrap">
@@ -1271,6 +1355,40 @@ function renderSettings(app) {
     deferredInstall = null;
     render();
   };
+
+  const runCheck = () => {
+    const out = $("#chkResult");
+    const code = normalizeCode($("#chkCode").value);
+    if (!code) { out.className = "check-result warn"; out.textContent = "Bitte den 8-stelligen Code eingeben, z. B. 7F3A-91C2."; return; }
+    const current = [];
+    const older = [];
+    let notLoaded = 0;
+    for (const p of allProjects()) {
+      if (!p.docs) { notLoaded++; continue; }
+      for (const d of p.docs) {
+        if (contentCode(p, d) === code) current.push({ p, d });
+        else {
+          const hit = (d.pdfCodes || []).filter((x) => x.code === code).pop();
+          if (hit) older.push({ p, d, at: hit.at });
+        }
+      }
+    }
+    const label = (x) => `BV ${h(x.p.number)} ${h(x.p.client || x.p.title)} – „${h(x.d.title)}“ vom ${formatDateDE(x.d.date)}`;
+    if (current.length) {
+      out.className = "check-result ok";
+      out.innerHTML = `✓ <strong>${code}</strong> entspricht dem <strong>aktuellen Stand</strong>:<br>${current.map(label).join("<br>")}`;
+    } else if (older.length) {
+      out.className = "check-result warn";
+      out.innerHTML = `⚠ <strong>${code}</strong> gehört zu einem <strong>älteren Stand</strong> (PDF erstellt am ${older.map((x) => formatDateTimeDE(x.at)).join(", ")}).<br>` +
+        `Die Dokumentation wurde danach geändert:<br>${older.map(label).join("<br>")}`;
+    } else {
+      out.className = "check-result bad";
+      out.innerHTML = `✗ Zu <strong>${code}</strong> wurde keine Dokumentation gefunden.` +
+        (notLoaded ? ` Hinweis: ${notLoaded} Bauvorhaben sind auf diesem Gerät nicht geladen – dort einmal öffnen und erneut prüfen.` : "");
+    }
+  };
+  $("#chkBtn").onclick = runCheck;
+  $("#chkCode").addEventListener("keydown", (e) => { if (e.key === "Enter") runCheck(); });
 
   $("#bkExport").onclick = async () => {
     try {

@@ -17,6 +17,9 @@ Gesammelte Vorschläge für spätere Versionen. Reihenfolge = grobe Priorität.
 ## Übersicht
 - [ ] **Dokumentation duplizieren** (wiederkehrende Kontrollen mit gleicher Struktur)
 
+## Anmeldung
+- [ ] Firmenkonto bei der Anmeldung vorschlagen (privates Microsoft-Konto vermeiden)
+
 ## Mehrere Nutzer (nach Umstellung auf SharePoint)
 - [ ] **„Erstellt von“** an jedem Eintrag (aus der Microsoft-Anmeldung)
 - [ ] **Zuständigkeiten je BV**: eigene BVs standardmäßig, alle durchsuchbar
@@ -25,3 +28,5 @@ Gesammelte Vorschläge für spätere Versionen. Reihenfolge = grobe Priorität.
 ## Erledigt
 - [x] Abnahmeprotokoll mit Anwesenden und Unterschriften (v2.2)
 - [x] PDF teilen am Handy (v2.2)
+- [x] Live-Kamera im Browser (v2.5)
+- [x] Prüfcode im PDF, Unterschriften an den Inhalt gebunden (v2.6)
