@@ -105,69 +105,116 @@ export async function buildPdf(p, d, onProgress = () => {}) {
   const pdf = new jsPDF({ unit: "pt", format: "a4", compress: true });
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
-  const margin = 40;
-  const contentTop = margin + 75;
-  const maxW = pageWidth - 2 * margin;
-  const usableH = pageHeight - margin - contentTop;
 
-  function drawHeader() {
-    pdf.setFontSize(10);
-    pdf.setTextColor(0);
-    pdf.text(["Friedrich Bühler GmbH & Co. KG", "Daimlerstraße 7+11", "72213 Altensteig"], margin, margin);
-    if (logoDataURL) {
-      // Logo unverzerrt in einen Rahmen von max. 160 x 45 pt einpassen, rechtsbündig
-      let lw = 160;
-      let lh = lw / logoRatio;
-      if (lh > 45) { lh = 45; lw = lh * logoRatio; }
-      try { pdf.addImage(logoDataURL, "PNG", pageWidth - margin - lw, margin - 10, lw, lh); }
-      catch (e) { console.warn("Logo nicht ins PDF", e); }
-    }
-    pdf.setDrawColor(220);
-    pdf.line(margin, margin + 55, pageWidth - margin, margin + 55);
+  /* ---------- Gestaltung ---------- */
+  const ML = 48;                         // Rand links/rechts
+  const maxW = pageWidth - 2 * ML;
+  const FOOT_Y = pageHeight - 34;        // Fußzeile
+  const BOTTOM = FOOT_Y - 18;            // Inhalt endet hier
+  const RED = [202, 50, 45];
+  const DARK = [40, 40, 38];
+  const GRAY = [71, 70, 66];
+  const MUTED = [125, 124, 119];
+  const LINE = [222, 222, 219];
+  const SOFT = [246, 246, 244];
+  const proto = d.protocol && d.protocol.enabled ? d.protocol : null;
+  const kicker = proto ? "ABNAHMEPROTOKOLL" : "BAUDOKUMENTATION";
+  const color = (c) => pdf.setTextColor(c[0], c[1], c[2]);
+  const font = (style, size, c = DARK) => { pdf.setFont("helvetica", style); pdf.setFontSize(size); color(c); };
+  const spaced = (txt, x, yy, space = 1.1, opts = {}) => {
+    pdf.setCharSpace(space);
+    pdf.text(txt, x, yy, opts);
+    pdf.setCharSpace(0);
+  };
+  const hair = (x1, yy, x2, c = LINE, w = 0.6) => { pdf.setDrawColor(c[0], c[1], c[2]); pdf.setLineWidth(w); pdf.line(x1, yy, x2, yy); };
+
+  function logo(x, top, maxLw, maxLh) {
+    if (!logoDataURL) return 0;
+    let lw = maxLw;
+    let lh = lw / logoRatio;
+    if (lh > maxLh) { lh = maxLh; lw = lh * logoRatio; }
+    try { pdf.addImage(logoDataURL, "PNG", x - lw, top, lw, lh); } catch (e) { console.warn("Logo nicht ins PDF", e); }
+    return lh;
   }
 
-  let y = contentTop;
+  // Kopf Seite 1: Anschrift links, Logo rechts, feine Linie mit rotem Akzent
+  function headerFirst() {
+    font("normal", 8.5, MUTED);
+    pdf.text(["Friedrich Bühler GmbH & Co. KG", "Daimlerstraße 7+11", "72213 Altensteig"], ML, 44, { lineHeightFactor: 1.35 });
+    logo(pageWidth - ML, 30, 150, 40);
+    hair(ML, 86, pageWidth - ML);
+    pdf.setFillColor(RED[0], RED[1], RED[2]);
+    pdf.rect(ML, 85, 46, 2, "F");
+    return 112;
+  }
+  // Kopf Folgeseiten: kompakt
+  function headerNext() {
+    font("bold", 7.5, RED);
+    spaced(kicker, ML, 40, 1);
+    font("normal", 9, GRAY);
+    pdf.text(`BV ${p.number} · ${d.title || "Dokumentation"}`, ML, 53, { maxWidth: maxW - 130 });
+    logo(pageWidth - ML, 30, 100, 26);
+    hair(ML, 66, pageWidth - ML);
+    return 88;
+  }
+
+  let y = headerFirst();
   function newPage() {
     pdf.addPage();
-    drawHeader();
-    y = contentTop;
+    y = headerNext();
   }
   function ensureSpace(h) {
-    if (y + h > pageHeight - margin) newPage();
+    if (y + h > BOTTOM) newPage();
   }
+  const usableH = BOTTOM - 88;
 
-  drawHeader();
+  /* ---------- Titelblock ---------- */
+  font("bold", 9, RED);
+  spaced(kicker, ML, y, 1.6);
+  y += 22;
+  font("bold", 21, DARK);
+  const titleLines = pdf.splitTextToSize(d.title || "Dokumentation", maxW);
+  pdf.text(titleLines, ML, y, { lineHeightFactor: 1.15 });
+  y += 21 * 1.15 * (titleLines.length - 1) + 16;
 
-  // ---- Kopf ----
-  const proto = d.protocol && d.protocol.enabled ? d.protocol : null;
-  if (proto) {
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(20);
-    pdf.text("Abnahmeprotokoll", margin, y);
-    pdf.setFont("helvetica", "normal");
-    y += 26;
+  // Infokasten: BV-Nr. | Bauherr | Bauort | Datum
+  const fields = [
+    ["BV-NR.", p.number, 0.15],
+    ["BAUHERR / AUFTRAGGEBER", p.client || p.title || "–", 0.37],
+    ["BAUORT", p.place || "–", 0.30],
+    ["DATUM", formatDateDE(d.date), 0.18],
+  ];
+  const padX = 12;
+  const innerW = maxW - 2 * padX;
+  font("normal", 10.5, DARK);
+  const valLines = fields.map(([, v, w]) => pdf.splitTextToSize(String(v), innerW * w - 10).slice(0, 2));
+  const boxH = 30 + Math.max(...valLines.map((l) => l.length)) * 13;
+  pdf.setFillColor(SOFT[0], SOFT[1], SOFT[2]);
+  pdf.setDrawColor(LINE[0], LINE[1], LINE[2]);
+  pdf.setLineWidth(0.6);
+  pdf.roundedRect(ML, y, maxW, boxH, 4, 4, "FD");
+  let fx = ML + padX;
+  fields.forEach(([label, , w], i) => {
+    font("bold", 6.8, MUTED);
+    spaced(label, fx, y + 15, 0.8);
+    font(i === 0 ? "bold" : "normal", 10.5, i === 0 ? RED : DARK);
+    pdf.text(valLines[i], fx, y + 29, { lineHeightFactor: 1.2 });
+    fx += innerW * w;
+  });
+  y += boxH + 26;
+
+  // Abschnittsüberschrift
+  function section(title) {
+    ensureSpace(46);
+    font("bold", 8.5, GRAY);
+    spaced(title, ML, y, 1.3);
+    y += 6;
+    hair(ML, y, pageWidth - ML);
+    y += 16;
   }
-  pdf.setFontSize(16);
-  pdf.text(`BV ${p.number}${p.client ? " – " + p.client : ""}`, margin, y, { maxWidth: maxW });
-  y += 18;
-  if (p.place) {
-    pdf.setFontSize(11);
-    pdf.setTextColor(90);
-    pdf.text(`Bauort: ${p.place}`, margin, y, { maxWidth: maxW });
-    pdf.setTextColor(0);
-    y += 18;
-  } else y += 6;
-  pdf.setFontSize(13);
-  pdf.text(d.title || "Dokumentation", margin, y, { maxWidth: maxW });
-  y += 16;
-  pdf.setFontSize(9.5);
-  pdf.setTextColor(90);
-  pdf.text("Datum: " + formatDateDE(d.date), margin, y);
-  pdf.setTextColor(0);
-  y += 14;
 
   // Unterschrift (PNG) in einen Rahmen einpassen
-  async function drawSig(sig, x, top, boxW, boxH) {
+  async function drawSig(sig, x, top, boxW, boxH2) {
     if (!sig) return;
     try {
       const dim = await new Promise((resolve) => {
@@ -176,121 +223,144 @@ export async function buildPdf(p, d, onProgress = () => {}) {
         im.onerror = () => resolve({ w: 3, h: 1 });
         im.src = sig;
       });
-      const sc = Math.min(boxW / dim.w, boxH / dim.h);
+      const sc = Math.min(boxW / dim.w, boxH2 / dim.h);
       const w = dim.w * sc;
-      const h = dim.h * sc;
-      pdf.addImage(sig, "PNG", x, top + (boxH - h), w, h);
+      const hgt = dim.h * sc;
+      pdf.addImage(sig, "PNG", x, top + (boxH2 - hgt), w, hgt);
     } catch (e) { console.warn("Unterschrift nicht ins PDF", e); }
   }
 
-  // ---- Anwesende (Abnahmeprotokoll) ----
+  /* ---------- Anwesende ---------- */
   const attendees = proto ? proto.attendees.filter((a) => a.name || a.company || a.sig) : [];
   if (proto && attendees.length) {
-    const colW = [maxW * 0.33, maxW * 0.37, maxW * 0.30];
-    const rowH = 36;
+    section("ANWESENDE");
+    const colW = [maxW * 0.32, maxW * 0.36, maxW * 0.32];
+    const rowH = 38;
     const tableHead = () => {
-      pdf.setFontSize(9);
-      pdf.setTextColor(110);
-      pdf.text("Name", margin, y);
-      pdf.text("Firma", margin + colW[0], y);
-      pdf.text("Unterschrift", margin + colW[0] + colW[1], y);
-      pdf.setTextColor(0);
-      y += 4;
-      pdf.setDrawColor(160);
-      pdf.line(margin, y, margin + maxW, y);
+      pdf.setFillColor(SOFT[0], SOFT[1], SOFT[2]);
+      pdf.rect(ML, y - 11, maxW, 18, "F");
+      font("bold", 7, MUTED);
+      spaced("NAME", ML + 8, y, 0.8);
+      spaced("FIRMA", ML + colW[0] + 8, y, 0.8);
+      spaced("UNTERSCHRIFT", ML + colW[0] + colW[1] + 8, y, 0.8);
+      y += 7;
     };
-    y += 14;
-    ensureSpace(30 + rowH * Math.min(2, attendees.length));
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(12);
-    pdf.text("Anwesende", margin, y);
-    pdf.setFont("helvetica", "normal");
-    y += 16;
+    ensureSpace(26 + rowH * Math.min(2, attendees.length));
     tableHead();
     for (const a of attendees) {
-      if (y + rowH > pageHeight - margin) { newPage(); tableHead(); }
-      pdf.setFontSize(10.5);
-      const mid = y + rowH / 2 + 4;
-      pdf.text(pdf.splitTextToSize(a.name || "", colW[0] - 8).slice(0, 2), margin, mid - (a.name && pdf.splitTextToSize(a.name, colW[0] - 8).length > 1 ? 6 : 0));
-      pdf.text(pdf.splitTextToSize(a.company || "", colW[1] - 8).slice(0, 2), margin + colW[0], mid - (a.company && pdf.splitTextToSize(a.company, colW[1] - 8).length > 1 ? 6 : 0));
-      // nur Unterschriften, die zum aktuellen Inhalt gehören
-      if (sigValid(a, code)) await drawSig(a.sig, margin + colW[0] + colW[1], y + 3, colW[2] - 6, rowH - 6);
+      if (y + rowH > BOTTOM) { newPage(); tableHead(); }
+      font("normal", 10, DARK);
+      const nameL = pdf.splitTextToSize(a.name || "", colW[0] - 14).slice(0, 2);
+      const compL = pdf.splitTextToSize(a.company || "", colW[1] - 14).slice(0, 2);
+      const mid = y + rowH / 2 + 3.5;
+      pdf.text(nameL, ML + 8, mid - (nameL.length > 1 ? 6 : 0), { lineHeightFactor: 1.2 });
+      font("normal", 10, GRAY);
+      pdf.text(compL, ML + colW[0] + 8, mid - (compL.length > 1 ? 6 : 0), { lineHeightFactor: 1.2 });
+      const sx = ML + colW[0] + colW[1] + 8;
+      if (sigValid(a, code)) {
+        await drawSig(a.sig, sx, y + 4, colW[2] - 20, rowH - 9);
+      } else {
+        // Platz zum Unterschreiben (z. B. auf Papier)
+        pdf.setDrawColor(190, 190, 186);
+        pdf.setLineWidth(0.5);
+        pdf.setLineDashPattern([1.5, 2], 0);
+        pdf.line(sx, y + rowH - 9, ML + maxW - 10, y + rowH - 9);
+        pdf.setLineDashPattern([], 0);
+      }
       y += rowH;
-      pdf.setDrawColor(210);
-      pdf.line(margin, y, margin + maxW, y);
+      hair(ML, y, pageWidth - ML);
     }
-    y += 10;
+    y += 26;
   }
 
-  if (proto && d.entries.length) {
-    y += 14;
-    ensureSpace(40);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(12);
-    pdf.text("Feststellungen", margin, y);
-    pdf.setFont("helvetica", "normal");
-    y += 2;
-  }
-
-  // ---- Einträge ----
+  /* ---------- Einträge ---------- */
   const cols = 3;
   const gap = 10;
-  const slotW = Math.floor((maxW - gap * (cols - 1)) / cols);
-  const fontSize = 12;
+  const indent = 24;
+  const gridW = maxW - indent;
+  const slotW = (gridW - gap * (cols - 1)) / cols;
+  const fontSize = 10.5;
+  const LHF = 1.38;
+
+  if (d.entries.length) section(proto ? "FESTSTELLUNGEN" : "EINTRÄGE");
 
   for (let idx = 0; idx < d.entries.length; idx++) {
     const en = d.entries[idx];
-    y += 12;
-
-    pdf.setFontSize(fontSize);
-    const lineH = fontSize * pdf.getLineHeightFactor();
-    const lines = pdf.splitTextToSize(`${idx + 1}. ${en.description || ""}`, maxW);
+    font("normal", fontSize, DARK);
+    pdf.setLineHeightFactor(LHF);
+    const lineH = fontSize * LHF;
+    const lines = (en.description || "").trim() ? pdf.splitTextToSize(en.description.trim(), maxW - indent) : [];
 
     const infos = (en.images || []).map((i) => converted.get(i.id)).filter(Boolean);
-    const rowHeight = (row) => Math.min(usableH, row.reduce((mx, it) => Math.max(mx, slotW * (it.h / it.w)), 0));
-    const firstRowH = infos.length ? rowHeight(infos.slice(0, cols)) : 0;
+    const capH = 12;
+    const rowHeight = (row) => Math.min(usableH - capH - 30, row.reduce((mx, it) => Math.max(mx, slotW * (it.h / it.w)), 0));
+    const firstRowH = infos.length ? rowHeight(infos.slice(0, cols)) + capH : 0;
 
-    // Text + erste Bildreihe möglichst zusammenhalten
-    const blockH = lines.length * lineH + 4 + firstRowH;
+    // Nummer + Text + erste Bildreihe möglichst zusammenhalten
+    const blockH = Math.max(lineH, lines.length * lineH) + 8 + firstRowH;
     if (blockH <= usableH) ensureSpace(blockH);
+    else ensureSpace(lineH * 2);
 
-    for (const line of lines) {
-      ensureSpace(lineH);
-      pdf.text(line, margin, y, { baseline: "top" });
+    // Nummer in rotem Kreis
+    pdf.setFillColor(RED[0], RED[1], RED[2]);
+    pdf.circle(ML + 8, y + 6, 8, "F");
+    font("bold", idx + 1 >= 10 ? 7.5 : 8.5, [255, 255, 255]);
+    pdf.text(String(idx + 1), ML + 8, y + 9, { align: "center" });
+
+    font("normal", fontSize, DARK);
+    if (lines.length) {
+      for (const line of lines) {
+        ensureSpace(lineH);
+        pdf.text(line, ML + indent, y, { baseline: "top" });
+        y += lineH;
+      }
+    } else {
       y += lineH;
     }
-    y += 4;
+    y += 6;
 
     for (let i = 0; i < infos.length; i += cols) {
       const row = infos.slice(i, i + cols);
       const rowH = rowHeight(row);
-      ensureSpace(rowH);
-      let x = margin;
-      for (const it of row) {
+      ensureSpace(rowH + capH);
+      let x = ML + indent;
+      row.forEach((it, k) => {
         let w = slotW;
-        let h = slotW * (it.h / it.w);
-        if (h > rowH) { w = w * (rowH / h); h = rowH; } // sehr hohe Bilder einpassen
-        try { pdf.addImage(it.data, "JPEG", x, y, w, h); }
-        catch (e) { console.warn("Bild nicht ins PDF", e); }
+        let hgt = slotW * (it.h / it.w);
+        if (hgt > rowH) { w = w * (rowH / hgt); hgt = rowH; }
+        try { pdf.addImage(it.data, "JPEG", x, y, w, hgt); } catch (e) { console.warn("Bild nicht ins PDF", e); }
+        pdf.setDrawColor(LINE[0], LINE[1], LINE[2]);
+        pdf.setLineWidth(0.5);
+        pdf.rect(x, y, w, hgt);
+        font("normal", 7, MUTED);
+        pdf.text(`Bild ${idx + 1}.${i + k + 1}`, x, y + hgt + 9);
         x += slotW + gap;
-      }
-      y += rowH + 10;
+      });
+      y += rowH + capH + 6;
+    }
+    pdf.setLineHeightFactor(1.15);
+
+    if (idx < d.entries.length - 1) {
+      y += 4;
+      hair(ML + indent, y, pageWidth - ML, [236, 236, 233], 0.5);
+      y += 16;
     }
   }
 
-  // ---- Seitenzahlen ----
+  /* ---------- Fußzeile + Prüfcode auf jeder Seite ---------- */
   const total = pdf.getNumberOfPages();
+  const created = formatDateTimeDE(new Date());
   for (let n = 1; n <= total; n++) {
     pdf.setPage(n);
-    pdf.setFontSize(9);
-    pdf.setTextColor(90);
-    pdf.text(`Seite ${n} von ${total}`, pageWidth - margin, pageHeight - 20, { align: "right" });
+    hair(ML, FOOT_Y - 10, pageWidth - ML);
+    font("normal", 7.5, MUTED);
+    pdf.text(`Friedrich Bühler GmbH & Co. KG  ·  BV ${p.number}  ·  ${d.title || "Dokumentation"}`, ML, FOOT_Y, { maxWidth: maxW - 80 });
+    pdf.text(`Seite ${n} von ${total}`, pageWidth - ML, FOOT_Y, { align: "right" });
     // Prüfcode dezent senkrecht am linken Rand
-    pdf.setFontSize(6.5);
-    pdf.setTextColor(165);
-    pdf.text(`BauDoc · Prüfcode ${code} · erstellt ${formatDateTimeDE(new Date())}`, 20, pageHeight - margin, { angle: 90 });
-    pdf.setTextColor(0);
+    font("normal", 6.5, [170, 170, 166]);
+    pdf.text(`BauDoc · Prüfcode ${code} · erstellt ${created}`, 22, FOOT_Y - 10, { angle: 90 });
   }
+  color(DARK);
 
   const blob = pdf.output("blob");
   return { blob, filename: pdfFilename(p, d), missing, code };
