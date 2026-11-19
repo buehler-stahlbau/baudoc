@@ -19,7 +19,7 @@ js/onedrive.js        Microsoft-Anmeldung + Dateizugriff
 js/pdf.js             PDF-Export
 js/images.js          Bildverarbeitung
 js/backup.js          Sicherung speichern / laden
-vendor/               jsPDF 2.5.1, MSAL Browser 2.39.0
+vendor/               jsPDF 2.5.1, MSAL Browser 2.39.0, pdf.js 3.11, Leaflet 1.9.4
 ```
 
 ## Ablage in OneDrive
@@ -40,6 +40,9 @@ BauDoc/
   komplett auf dem Gerät gehalten, inkl. Fotos.
 - **Andere Bauvorhaben** erscheinen nur in der Liste. Der Inhalt wird beim Öffnen
   geladen, Fotos nur als Vorschau.
+- **Karte**: Position = Ortsmitte des Bauorts (Auswahl aus den Ortsvorschlägen).
+  Ortssuche und Kartenbilder kommen von OpenStreetMap (nur Ortsnamen werden gesendet).
+  `_daten/karte.json` hält die Positionen aller BV.
 - Fotos: 1 MB in OneDrive, im PDF stärker komprimiert (PDF max. 15 MB).
 
 ## OneDrive einrichten (einmalig, M365-Admin)

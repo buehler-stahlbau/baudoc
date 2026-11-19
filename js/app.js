@@ -15,6 +15,7 @@ import {
 import { captureSignature } from "./signature.js";
 import { captureFromWebcam, hasWebcam, isMobileDevice } from "./camera.js";
 import { contentCode, sigValid, validSignatures, normalizeCode, isSafeSig } from "./integrity.js";
+import { searchPlaces, geoValid, loadLeaflet, TILE_URL, TILE_ATTRIBUTION } from "./geo.js";
 import { processFile, makeThumb } from "./images.js";
 import { buildPdf, PDF_MAX_BYTES } from "./pdf.js";
 import { exportBackup, importBackup } from "./backup.js";
@@ -262,6 +263,7 @@ function render() {
 
   if (st.view === "archive") renderArchive(app);
   else if (st.view === "settings") renderSettings(app);
+  else if (st.view === "map") renderMap(app);
   else {
     const { p, d } = ctx();
     if (p) renderProjectDetail(app, p, d);
@@ -278,6 +280,7 @@ function updateHeader() {
   const tabs = {
     tabProjects: "projects",
     tabFav: "favorites",
+    tabMap: "map",
     tabArchive: "archive",
     tabSettings: "settings",
   };
@@ -411,7 +414,10 @@ function renderProjectList(app, onlyFav) {
         <div class="add-row">
           <input id="newNum" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="5" placeholder="BV-Nr." autocomplete="off" enterkeyhint="next" />
           <input id="newClient" type="text" placeholder="Bauherr / Auftraggeber" autocomplete="off" enterkeyhint="next" />
-          <input id="newPlace" type="text" placeholder="Bauort" autocomplete="off" enterkeyhint="done" />
+          <div class="place-field">
+            <input id="newPlace" type="text" placeholder="Bauort" autocomplete="off" enterkeyhint="done" />
+            <div class="place-list" id="newPlaceList"></div>
+          </div>
         </div>
         <button class="primary block" id="addP" type="button">Bauvorhaben anlegen</button>
       </div>`);
@@ -422,6 +428,8 @@ function renderProjectList(app, onlyFav) {
       if (numEl.value.length === 5) $("#newClient").focus();
     });
     $("#addP").onclick = () => addProject();
+    newGeo = null;
+    attachPlaceSuggest($("#newPlace"), $("#newPlaceList"), (g) => { newGeo = g; });
     $("#newClient").addEventListener("keydown", (e) => { if (e.key === "Enter") $("#newPlace").focus(); });
     $("#newPlace").addEventListener("keydown", (e) => { if (e.key === "Enter") addProject(); });
     setTimeout(() => numEl.focus(), 50);
@@ -499,6 +507,7 @@ function addProject() {
     return;
   }
   const p = newProject(num, client, place);
+  if (newGeo && newGeo.place === place) { p.geo = newGeo; S.state.mapDirty = true; }
   S.state.projects.push(p);
   touchProject(p);
   favoritesChanged();
@@ -519,6 +528,154 @@ function toggleFav(p) {
   sync.refreshStatus();
   if (p.fav) sync.schedule(300, { full: true });
   else { sync.freeLocal(p).catch((e) => console.warn(e)); sync.schedule(1500); }
+}
+
+/* =========================================================
+   Ortsvorschläge (Bauort)
+========================================================= */
+let newGeo = null;
+const PIN_ICON = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></svg>';
+
+function showPlaceGeo(p) {
+  const box = $("#placeGeo");
+  if (!box || !p) return;
+  const typed = ($("#projPlace") || {}).value;
+  const valid = geoValid(p) && (typed === undefined || typed.trim() === p.place);
+  box.className = "place-geo" + (valid ? " ok" : "");
+  box.innerHTML = valid
+    ? `${PIN_ICON} Auf der Karte: ${h(p.geo.label || p.geo.place)}`
+    : `${PIN_ICON} Ort aus den Vorschlägen wählen, damit das BV auf der Karte erscheint`;
+}
+
+function attachPlaceSuggest(input, list, onPick) {
+  let timer = null;
+  let seq = 0;
+  const close = () => { list.innerHTML = ""; };
+  input.addEventListener("input", () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 3) { close(); return; }
+    timer = setTimeout(async () => {
+      if (!navigator.onLine) { list.innerHTML = `<div class="place-msg">Ortsvorschläge nur mit Internet</div>`; return; }
+      const my = ++seq;
+      list.innerHTML = `<div class="place-msg">Suche …</div>`;
+      try {
+        const res = await searchPlaces(q);
+        if (my !== seq || document.activeElement !== input) { if (my === seq) close(); return; }
+        if (!res.length) { list.innerHTML = `<div class="place-msg">Kein Ort gefunden</div>`; return; }
+        list.innerHTML = res.map((r, i) => `<button type="button" class="place-opt" data-i="${i}">${h(r.name)}${r.ctx ? `<span>${h(r.ctx)}</span>` : ""}</button>`).join("");
+        $$(".place-opt", list).forEach((b) => {
+          // pointerdown statt click: Auswahl vor dem Verlassen des Feldes
+          b.addEventListener("pointerdown", (e) => {
+            e.preventDefault();
+            const r = res[Number(b.dataset.i)];
+            input.value = r.name;
+            close();
+            onPick({ lat: r.lat, lon: r.lon, place: r.name, label: r.ctx ? `${r.name}, ${r.ctx}` : r.name });
+          });
+        });
+      } catch (e) {
+        if (my === seq) list.innerHTML = `<div class="place-msg">${h(e.message)}</div>`;
+      }
+    }, 450);
+  });
+  input.addEventListener("blur", () => setTimeout(close, 150));
+  input.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+}
+
+/* =========================================================
+   Karte
+========================================================= */
+let mapInstance = null;
+let mapView = null; // zuletzt gezeigter Ausschnitt
+
+function pinHtml(color, count) {
+  // Zahl direkt in der Grafik (wird so nie vom Schatten überdeckt)
+  const n = count > 99 ? "99+" : String(count);
+  const size = n.length >= 3 ? 8.5 : n.length === 2 ? 11 : 12.5;
+  return `<div class="pin" data-count="${count > 1 ? n : ""}"><svg viewBox="0 0 32 42" width="32" height="42" aria-hidden="true">
+      <path d="M16 41s13-12.6 13-24A13 13 0 0 0 3 17c0 11.4 13 24 13 24z" fill="${color}" stroke="#fff" stroke-width="2"/>
+      <circle cx="16" cy="15" r="9.5" fill="#fff"/>
+      ${count > 1 ? `<text x="16" y="15" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${size}" fill="#2b2b28">${n}</text>` : ""}
+    </svg></div>`;
+}
+
+function renderMap(app) {
+  if (mapInstance) {
+    try { mapView = { c: mapInstance.getCenter(), z: mapInstance.getZoom() }; mapInstance.remove(); } catch {}
+    mapInstance = null;
+  }
+  const st = S.state;
+  const list = st.projects.filter(matches);
+  const onMap = list.filter(geoValid);
+  const missing = list.filter((p) => !geoValid(p));
+
+  app.appendChild(el(`
+    <div class="page-head"><h1>Karte</h1></div>`));
+  const card = el(`
+    <div class="card map-card">
+      <div id="map"></div>
+      <div class="map-info">
+        <span><span class="map-dot" style="background:var(--fav)"></span>Favoriten</span>
+        <span><span class="map-dot" style="background:#8d8c87"></span>weitere Bauvorhaben</span>
+        ${missing.length ? `<button class="map-missing" id="mapMissing" type="button">${missing.length} BV ohne Kartenposition</button>` : ""}
+      </div>
+    </div>`);
+  app.appendChild(card);
+
+  const mm = $("#mapMissing");
+  if (mm) mm.onclick = () => {
+    const names = missing.slice(0, 12).map((p) => `${p.number} ${p.client || p.title}${p.place ? " (" + p.place + ")" : ""}`).join("\n");
+    alert(`Ohne Kartenposition:\n\n${names}${missing.length > 12 ? "\n…" : ""}\n\nIm BV beim Bauort einen Ort aus den Vorschlägen wählen.`);
+  };
+
+  if (!navigator.onLine) {
+    $("#map").innerHTML = `<div class="empty"><p class="muted">Die Karte braucht eine Internetverbindung.</p></div>`;
+    return;
+  }
+
+  loadLeaflet().then((L) => {
+    const box = $("#map");
+    if (!box || S.state.view !== "map") return;
+    const map = L.map(box, { zoomControl: true, attributionControl: true });
+    mapInstance = map;
+    L.tileLayer(TILE_URL, { maxZoom: 18, attribution: TILE_ATTRIBUTION, referrerPolicy: "strict-origin-when-cross-origin" }).addTo(map);
+
+    // je Ort gruppieren; Favoriten (gold) und weitere (grau) als zwei Pins nebeneinander
+    const groups = new Map();
+    for (const p of onMap) {
+      const k = p.geo.lat.toFixed(4) + "," + p.geo.lon.toFixed(4);
+      if (!groups.has(k)) groups.set(k, { lat: p.geo.lat, lon: p.geo.lon, place: p.geo.place, fav: [], other: [] });
+      groups.get(k)[p.fav ? "fav" : "other"].push(p);
+    }
+    const pts = [];
+    for (const g of groups.values()) {
+      const both = g.fav.length && g.other.length;
+      const add = (items, color, dx) => {
+        if (!items.length) return;
+        const icon = L.divIcon({ className: "", html: pinHtml(color, items.length), iconSize: [32, 42], iconAnchor: [16 - dx, 41], popupAnchor: [dx, -38] });
+        const m = L.marker([g.lat, g.lon], { icon, title: `${g.place}: ${items.length} BV` }).addTo(map);
+        const sorted = items.slice().sort((a, b) => a.number.localeCompare(b.number));
+        m.bindPopup(`<div class="map-pop"><h4>${h(g.place)}</h4>${sorted.map((p) =>
+          `<button type="button" data-pid="${h(p.id)}">${p.fav ? '<span class="star">★</span>' : ""}<span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}</button>`).join("")}</div>`);
+      };
+      add(g.fav, "#d6a21c", both ? -15 : 0);
+      add(g.other, "#8d8c87", both ? 15 : 0);
+      pts.push([g.lat, g.lon]);
+    }
+    map.on("popupopen", (e) => {
+      $$("[data-pid]", e.popup.getElement()).forEach((b) => {
+        b.onclick = () => go({ view: "projects", selectedProjectId: b.dataset.pid, selectedDocId: null });
+      });
+    });
+    if (mapView) map.setView(mapView.c, mapView.z);
+    else if (pts.length === 1) map.setView(pts[0], 11);
+    else if (pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 11 });
+    else map.setView([48.586, 8.604], 9); // Altensteig
+  }).catch((e) => {
+    const box = $("#map");
+    if (box) box.innerHTML = `<div class="empty"><p class="muted">${h(e.message)}</p></div>`;
+  });
 }
 
 /* =========================================================
@@ -599,7 +756,11 @@ function renderProjectDetail(app, p, d) {
         </div>
         <div>
           <label class="field-label" for="projPlace">Bauort</label>
-          <input id="projPlace" type="text" value="${h(p.place)}" enterkeyhint="done" />
+          <div class="place-field">
+            <input id="projPlace" type="text" value="${h(p.place)}" autocomplete="off" enterkeyhint="done" />
+            <div class="place-list" id="projPlaceList"></div>
+          </div>
+          <div class="place-geo" id="placeGeo"></div>
         </div>
       </div>
       <div class="row wrap actions">
@@ -662,6 +823,17 @@ function renderProjectDetail(app, p, d) {
   clientEl.addEventListener("change", () => { if (!clientEl.value.trim()) clientEl.value = p.client; });
   clientEl.addEventListener("keydown", (e) => { if (e.key === "Enter") placeEl.focus(); });
   placeEl.addEventListener("keydown", (e) => { if (e.key === "Enter") placeEl.blur(); });
+  placeEl.addEventListener("input", () => showPlaceGeo(findProject(p.id)));
+  attachPlaceSuggest(placeEl, $("#projPlaceList"), (g) => {
+    const cur = findProject(p.id);
+    if (!cur) return;
+    setTitleParts(cur, clientEl.value.trim() || cur.client, g.place);
+    cur.geo = g;
+    S.state.mapDirty = true;
+    touchProject(cur);
+    showPlaceGeo(cur);
+  });
+  showPlaceGeo(p);
 
   // Inhalt liegt nur online
   if (p.docs === null) {

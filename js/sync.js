@@ -30,6 +30,9 @@ import {
 } from "./store.js";
 import { sanitizeName, projectLabel, sleep, isoDay } from "./util.js";
 import { makeThumb } from "./images.js";
+import { cleanGeo, geoValid } from "./geo.js";
+
+const MAP_INDEX = "karte.json"; // _daten/karte.json: Kartenposition je BV (auch für nicht geladene BV)
 
 const LEGACY_PROJECT_FILE = "baudoc.json"; // bis Version 2.8 im BV-Ordner
 
@@ -165,6 +168,7 @@ async function syncAll(full) {
 
   if (full) await refreshListing(root);
   if (full || S.state.prefs.dirty) await syncPrefs(root, dataDir);
+  if (full || S.state.mapDirty) await syncMapIndex(dataDir);
 
   const outbox = await db.outboxAll();
   const sel = st.selectedProjectId;
@@ -187,6 +191,30 @@ async function syncAll(full) {
   }
   outboxCount = (await db.outboxAll()).length;
   if (firstError) throw firstError;
+}
+
+/* Kartenpositionen aller BV in einer kleinen Datei, damit auch nicht geladene
+   BV auf der Karte erscheinen */
+async function syncMapIndex(dataDir) {
+  const remote = await od.getJson(dataDir.id, MAP_INDEX);
+  const idx = (remote && remote.data && typeof remote.data === "object" && remote.data.bv) ? { ...remote.data.bv } : {};
+  let changed = !remote;
+  for (const p of allProjects()) {
+    const fid = p.remote && p.remote.folderId;
+    if (!fid) continue;
+    const e = idx[fid] ? cleanGeo(idx[fid]) : null;
+    if (geoValid(p)) {
+      // eigener Stand -> in die Übersicht
+      if (!e || e.lat !== p.geo.lat || e.lon !== p.geo.lon || e.place !== p.geo.place) {
+        idx[fid] = { lat: p.geo.lat, lon: p.geo.lon, place: p.geo.place, label: p.geo.label || "" };
+        changed = true;
+      }
+    } else if (e && e.place === p.place) {
+      p.geo = e; // Position aus der Übersicht übernehmen
+    }
+  }
+  if (changed) await od.putJson(dataDir.id, MAP_INDEX, { format: "baudoc-map", version: 1, bv: idx }, null);
+  S.state.mapDirty = false;
 }
 
 /* Favoriten je Nutzer: BauDoc/_daten/nutzer/<anmeldename>.json */
@@ -455,6 +483,7 @@ function serialize(p) {
     title: p.title,
     client: p.client || "",
     place: p.place || "",
+    geo: p.geo || null,
     updatedAt: p.updatedAt || 0,
     deletedDocs: p.deletedDocs || [],
     docs: (p.docs || []).map((d) => ({
@@ -488,6 +517,7 @@ function cleanDoc(d) {
 }
 
 function adoptTitle(p, r) {
+  if (r.geo !== undefined) p.geo = cleanGeo(r.geo);
   if (r.number && /^\d{5}$/.test(r.number)) p.number = r.number;
   if (!r.title) return;
   p.title = r.title;

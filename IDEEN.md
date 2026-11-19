@@ -10,6 +10,11 @@ Gesammelte Vorschläge für spätere Versionen. Reihenfolge = grobe Priorität.
 - [ ] **Fotos beschriften/markieren**: Pfeile, Kreise, Text direkt ins Foto zeichnen
 - [ ] **Spracheingabe**: eigener 🎤-Knopf am Eintrag (Diktat, auch mit Handschuhen)
 
+## Karte (Vision)
+- [ ] **Genauer Standort per GPS** („Standort übernehmen“ auf der Baustelle)
+- [ ] **Navigation starten** (Google Maps / Apple Karten) – sinnvoll mit genauem Standort
+- [ ] **„Du bist bei BV …“** – passendes BV beim Öffnen auf der Baustelle vorschlagen
+
 ## PDF / Bericht
 - [ ] **Foto-Nummern im PDF** (Bild 1.1, 1.2 …) zum Bezugnehmen im Gespräch
 - [ ] **PDF per Mail** mit vorbereitetem Betreff
@@ -30,3 +35,4 @@ Gesammelte Vorschläge für spätere Versionen. Reihenfolge = grobe Priorität.
 - [x] PDF teilen am Handy (v2.2)
 - [x] Live-Kamera im Browser (v2.5)
 - [x] Prüfcode im PDF, Unterschriften an den Inhalt gebunden (v2.6)
+- [x] Karte mit Pins je Ort, Ortsvorschläge beim Bauort (v3.2)

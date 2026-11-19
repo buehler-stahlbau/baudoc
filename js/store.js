@@ -18,6 +18,7 @@ import * as db from "./db.js";
 import { newId, toast } from "./util.js";
 import { dataUrlToBlob, makeThumb } from "./images.js";
 import { contentCode, isSafeSig } from "./integrity.js";
+import { cleanGeo } from "./geo.js";
 
 function defaultState() {
   return {
@@ -62,7 +63,7 @@ export async function load() {
     S.state = Object.assign(def, saved);
     S.state.remote = Object.assign(defaultState().remote, saved.remote || {});
     S.state.prefs = Object.assign(defaultState().prefs, saved.prefs || {});
-    if (!["projects", "favorites", "archive", "settings"].includes(S.state.view)) S.state.view = "projects";
+    if (!["projects", "favorites", "map", "archive", "settings"].includes(S.state.view)) S.state.view = "projects";
     allProjects().forEach(normalizeProject);
     if (migrated) await saveNow();
   }
@@ -268,6 +269,7 @@ export function newProtocol(p) {
 }
 
 export function normalizeProject(p) {
+  p.geo = cleanGeo(p.geo);
   p.number = String(p.number ?? p.id ?? "");
   p.title = String(p.title ?? "");
   if (typeof p.client !== "string" || typeof p.place !== "string") {
