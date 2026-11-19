@@ -10,8 +10,8 @@
               "/sites/{site-id}/drive"  = SharePoint-Ablage (später, für alle)
 ========================================================= */
 export const CONFIG = {
-  clientId: "",
-  tenantId: "organizations",
+  clientId: "9710374b-0d37-4cc6-8e93-a05c17d16b57",   // BauDoc (App-Registrierung Bühler)
+  tenantId: "0f5809d8-bfb7-440e-b308-f43d58bfb884",   // Verzeichnis Friedrich Bühler GmbH & Co. KG
   driveBase: "/me/drive",
   rootFolder: "BauDoc",
   archiveFolder: "_Archiv",
@@ -19,4 +19,4 @@ export const CONFIG = {
   scopes: ["User.Read", "Files.ReadWrite"],
 };
 
-export const APP_VERSION = "2.3.0-beta";
+export const APP_VERSION = "2.4.0-beta";
