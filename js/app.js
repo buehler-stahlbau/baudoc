@@ -221,11 +221,41 @@ function renderNow() {
   render();
 }
 
+// Anmeldepflicht: BauDoc ist nur nach Anmeldung mit einem Bühler-Konto nutzbar.
+// Nach der ersten Anmeldung bleibt das Konto auf dem Gerät gespeichert -> auch offline nutzbar.
+function isLocked() {
+  return od.isConfigured() && !od.getAccount();
+}
+
+let loginError = "";
+
+function renderLogin(app) {
+  const offline = !navigator.onLine;
+  app.appendChild(el(`
+    <div class="login-wrap">
+      <div class="card login-card">
+        <img class="login-logo" src="logo.png" alt="Bühler Stahlbau" />
+        <h1>BauDoc</h1>
+        <p class="muted">Baustellendokumentation der Friedrich Bühler GmbH &amp; Co. KG</p>
+        <p>Bitte mit dem <strong>Bühler-Firmenkonto</strong> anmelden.</p>
+        <button class="primary block" id="loginGate" type="button" ${offline ? "disabled" : ""}>Mit Microsoft anmelden</button>
+        ${offline ? `<p class="muted">Für die erste Anmeldung wird eine Internetverbindung benötigt.</p>` : ""}
+        ${loginError ? `<p class="error-text">${h(loginError)}</p>` : ""}
+        <p class="muted login-hint">Nach der Anmeldung funktioniert BauDoc auf diesem Gerät auch ohne Netz.</p>
+      </div>
+    </div>`));
+  const b = $("#loginGate");
+  if (b) b.onclick = () => od.login();
+}
+
 function render() {
   pendingRender = false;
-  updateHeader();
+  const locked = isLocked();
+  document.body.classList.toggle("locked", locked);
   const app = $("#app");
   app.innerHTML = "";
+  if (locked) { renderLogin(app); return; }
+  updateHeader();
   const st = S.state;
 
   if (st.view === "archive") renderArchive(app);
@@ -1390,7 +1420,7 @@ function renderSettings(app) {
   };
   const logoutBtn = $("#logout");
   if (logoutBtn) logoutBtn.onclick = () => {
-    if (confirm("Abmelden? Die Daten auf diesem Gerät bleiben erhalten.")) od.logout();
+    if (confirm("Abmelden?\n\nDie Daten bleiben auf diesem Gerät gespeichert, sind aber erst nach erneuter Anmeldung wieder zugänglich.")) od.logout();
   };
   const installBtn = $("#installBtn");
   if (installBtn) installBtn.onclick = async () => {
@@ -1519,7 +1549,8 @@ async function checkAccount() {
     await od.init();
   } catch (e) {
     console.warn("Anmeldung", e);
-    toast("Anmeldung fehlgeschlagen: " + (e.message || e), "error", 10000);
+    loginError = "Anmeldung fehlgeschlagen: " + (e.message || e);
+    toast(loginError, "error", 10000);
   }
   await checkAccount();
 
@@ -1536,8 +1567,8 @@ async function checkAccount() {
   cleanupOrphanImages();
   sync.run({ full: true });
 
-  window.addEventListener("online", () => sync.run({ full: true }));
-  window.addEventListener("offline", () => sync.refreshStatus());
+  window.addEventListener("online", () => { if (isLocked()) render(); sync.run({ full: true }); });
+  window.addEventListener("offline", () => { if (isLocked()) render(); sync.refreshStatus(); });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") saveNow();
     else sync.schedule(500, { full: true });

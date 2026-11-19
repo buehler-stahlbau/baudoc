@@ -313,6 +313,16 @@
     .cam-shutter:disabled { opacity: .4; }
     .cam-shutter:not(:disabled):active { transform: scale(.94); }
 
+    /* ---------- Anmeldepflicht ---------- */
+    body.locked .tabs, body.locked .search-wrap, body.locked #searchBtn, body.locked #tabSettings, body.locked #syncChip { display: none !important; }
+    body.locked .appbar { display: none; } /* Logo steht in der Anmeldekarte */
+    .login-wrap { display: flex; justify-content: center; padding-top: 6vh; }
+    .login-card { width: min(420px, 100%); text-align: center; padding: 28px 22px; }
+    .login-logo { height: 44px; margin-bottom: 14px; }
+    .login-card h1 { font-size: 1.6rem; margin-bottom: 4px; }
+    .login-card .block { margin: 14px 0 8px; min-height: 46px; }
+    .login-hint { margin-top: 14px; }
+
     /* ---------- Fotos ---------- */
     .images { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
     .images:empty { display: none; }
