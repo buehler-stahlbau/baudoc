@@ -34,8 +34,10 @@ const isTouch = window.matchMedia("(pointer: coarse)").matches;
 const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
 
 /* ---------- Flüchtige UI-Daten (nicht gespeichert) ---------- */
-const drafts = {};      // docId -> Text "Neuer Eintrag"
-const draftImgs = {};   // docId -> [imageId] für "Neuer Eintrag"
+// Entwürfe "Neuer Eintrag" (noch nicht gespeichert) – werden mit dem Zustand gesichert,
+// damit Text und Fotos auch beim Schließen der App nicht verloren gehen
+let drafts = {};      // docId -> Text
+let draftImgs = {};   // docId -> [imageId]
 let filterText = "";
 let addOpen = false;
 let justAdded = null; // frisch angelegtes BV kurz hervorheben
@@ -744,6 +746,9 @@ async function deleteDoc(pid, did) {
   if (d.remote && d.remote.folderId) p.pendingDeletes.push({ id: d.remote.folderId, parent: p.remote.folderId });
   for (const img of imagesOfDoc(d)) { try { await db.imgDelete(img.id); } catch {} }
   try { await db.outboxDelete(`pdf:${pid}:${did}`); } catch {}
+  for (const id of draftImgs[did] || []) { try { await db.imgDelete(id); } catch {} }
+  delete draftImgs[did];
+  delete drafts[did];
   touchProject(p);
   go({ selectedDocId: null }, { replace: true, scroll: false });
 }
@@ -836,7 +841,7 @@ function renderDocEditor(container, p, d) {
   });
 
   const tEl = $("#eText");
-  tEl.addEventListener("input", () => { drafts[d.id] = tEl.value; });
+  tEl.addEventListener("input", () => { drafts[d.id] = tEl.value; saveSoon(); });
 
   $$("input.newImg", card).forEach((inp) => inp.addEventListener("change", async (ev) => {
     const files = Array.from(ev.target.files || []);
@@ -844,6 +849,7 @@ function renderDocEditor(container, p, d) {
     if (!files.length) return;
     const ids = await processFiles(files);
     draftImgs[d.id] = (draftImgs[d.id] || []).concat(ids);
+    saveNow();
     renderNow();
   }));
 
@@ -853,6 +859,7 @@ function renderDocEditor(container, p, d) {
       if (!files.length) return;
       const ids = await processFiles(files);
       draftImgs[d.id] = (draftImgs[d.id] || []).concat(ids);
+      saveNow();
       renderNow();
     };
   });
@@ -862,6 +869,7 @@ function renderDocEditor(container, p, d) {
       e.stopPropagation();
       const id = b.dataset.delImg;
       draftImgs[d.id] = (draftImgs[d.id] || []).filter((x) => x !== id);
+      saveSoon();
       try { await db.imgDelete(id); } catch {}
       render();
     };
@@ -1540,10 +1548,23 @@ async function checkAccount() {
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
 
   await load();
-  // Startansicht: eigene Favoriten, falls vorhanden
-  if (S.state.view === "projects" && !S.state.selectedProjectId && S.state.projects.some((p) => p.fav)) {
-    S.state.view = "favorites";
-  }
+  if (!S.state.drafts || typeof S.state.drafts !== "object") S.state.drafts = {};
+  if (!S.state.draftImgs || typeof S.state.draftImgs !== "object") S.state.draftImgs = {};
+  drafts = S.state.drafts;
+  draftImgs = S.state.draftImgs;
+
+  // Browser schließen, während noch hochgeladen wird -> nachfragen (PC)
+  window.addEventListener("beforeunload", (e) => {
+    if (od.isSignedIn() && navigator.onLine && (sync.status.kind === "syncing" || sync.status.pending > 0)) {
+      saveNow();
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+  // Startseite ist immer die Liste "Bauvorhaben"
+  S.state.view = "projects";
+  S.state.selectedProjectId = null;
+  S.state.selectedDocId = null;
 
   try {
     await od.init();

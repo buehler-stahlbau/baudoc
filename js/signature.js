@@ -16,6 +16,7 @@ export function captureSignature({ title = "Unterschrift", subtitle = "", canRem
         <div>
           <strong>${h(title)}</strong>
           ${subtitle ? `<div class="muted">${h(subtitle)}</div>` : ""}
+          <div class="sig-turn">↻ Handy quer halten</div>
         </div>
         <div class="sig-pad">
           <div class="sig-line"></div>
@@ -39,13 +40,30 @@ export function captureSignature({ title = "Unterschrift", subtitle = "", canRem
     const hint = wrap.querySelector(".sig-hint");
     const ctx = canvas.getContext("2d");
     const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const inner = wrap.querySelector(".sig-inner");
+
+    // Handy hochkant: Feld um 90° drehen -> Handy quer halten, volle Displaylänge zum Unterschreiben
+    const portraitPhone = window.matchMedia("(orientation: portrait) and (max-width: 600px)");
+    let rotated = false;
+    function applyRotation() {
+      rotated = portraitPhone.matches;
+      wrap.classList.toggle("sig-rotated", rotated);
+      if (rotated) {
+        inner.style.width = window.innerHeight + "px";
+        inner.style.height = window.innerWidth + "px";
+      } else {
+        inner.style.width = "";
+        inner.style.height = "";
+      }
+    }
+    applyRotation();
     let drawing = false;
     let pts = [];
     let hasInk = false;
     let bounds = null;
 
     function setup() {
-      const r = pad.getBoundingClientRect();
+      const r = { width: pad.clientWidth, height: pad.clientHeight }; // Maße ohne Drehung
       canvas.width = Math.round(r.width * dpr);
       canvas.height = Math.round(r.height * dpr);
       canvas.style.width = r.width + "px";
@@ -71,7 +89,10 @@ export function captureSignature({ title = "Unterschrift", subtitle = "", canRem
     function pos(e) {
       const r = canvas.getBoundingClientRect();
       const pressure = e.pointerType === "pen" && e.pressure ? e.pressure : 0.5;
-      return { x: e.clientX - r.left, y: e.clientY - r.top, w: 1.4 + pressure * 2.2 };
+      const w = 1.4 + pressure * 2.2;
+      // gedreht (90° im Uhrzeigersinn): Bildschirm-unten = Feld-rechts, Bildschirm-links = Feld-unten
+      if (rotated) return { x: e.clientY - r.top, y: r.right - e.clientX, w };
+      return { x: e.clientX - r.left, y: e.clientY - r.top, w };
     }
 
     canvas.addEventListener("pointerdown", (e) => {
@@ -136,7 +157,7 @@ export function captureSignature({ title = "Unterschrift", subtitle = "", canRem
     }
     const onKey = (e) => { if (e.key === "Escape") close(undefined); };
     // Drehen des Handys: Feld neu aufbauen (nur solange noch nichts gezeichnet ist)
-    const onResize = () => { if (!hasInk) setup(); };
+    const onResize = () => { applyRotation(); if (!hasInk) setup(); };
     window.addEventListener("resize", onResize);
     document.addEventListener("keydown", onKey);
 

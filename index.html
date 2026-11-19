@@ -404,6 +404,19 @@
     .sig-line { position: absolute; left: 6%; right: 6%; bottom: 26%; border-bottom: 1.5px solid var(--brand-gray-200); pointer-events: none; }
     .sig-hint { position: absolute; left: 6%; bottom: 12%; font-size: .85rem; color: var(--brand-gray-500); pointer-events: none; }
     .sig-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .sig-turn { display: none; }
+    /* Handy hochkant: Unterschriftsfeld gedreht (Handy quer halten) */
+    .sig-modal.sig-rotated { padding: 0; background: #fff; }
+    .sig-modal.sig-rotated .sig-inner {
+      position: fixed; top: 50%; left: 50%; max-width: none; border-radius: 0;
+      transform: translate(-50%, -50%) rotate(90deg);
+      padding: calc(10px + var(--safe-left)) calc(14px + var(--safe-top)) calc(10px + var(--safe-right)) calc(14px + var(--safe-bottom));
+      display: flex; flex-direction: column; gap: 8px; box-sizing: border-box;
+    }
+    .sig-modal.sig-rotated .sig-pad { flex: 1; aspect-ratio: auto; max-height: none; min-height: 0; }
+    .sig-modal.sig-rotated .sig-actions button { flex: 0 0 auto; min-height: 40px; }
+    .sig-modal.sig-rotated .sig-actions .grow { display: block; }
+    .sig-modal.sig-rotated .sig-turn { display: block; font-size: .8rem; color: var(--brand-gray-500); }
     @media (max-width: 600px){ .sig-actions button { flex: 1 1 auto; } .sig-actions .grow { display: none; } }
 
     .steps { margin: 6px 0; padding-left: 20px; }
