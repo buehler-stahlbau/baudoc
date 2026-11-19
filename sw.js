@@ -4,7 +4,7 @@
    bei fehlendem Netz der zwischengespeicherte Stand.
    Bei jeder neuen Version CACHE hochzählen.
 ========================================================= */
-const CACHE = "baudoc-3.1.0-beta-1";
+const CACHE = "baudoc-3.1.1-beta-1";
 const ASSETS = [
   "./",
   "./index.html",
@@ -63,7 +63,8 @@ self.addEventListener("fetch", (event) => {
     const cache = await caches.open(CACHE);
     const cached = await cache.match(req, { ignoreSearch: true });
     try {
-      const res = await Promise.race([fetch(req), timeout(cached ? 4000 : 30000)]);
+      // "no-cache": beim Server nachfragen, ob es eine neuere Fassung gibt (sonst bis zu 10 Min. alter Stand)
+      const res = await Promise.race([fetch(req, { cache: "no-cache" }), timeout(cached ? 4000 : 30000)]);
       if (res && res.ok) cache.put(req, res.clone());
       return res;
     } catch (e) {

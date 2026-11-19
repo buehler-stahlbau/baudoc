@@ -337,6 +337,9 @@
     .login-card .block { margin: 14px 0 8px; min-height: 46px; }
     .login-hint { margin-top: 14px; }
 
+    /* Hinweis neue Version */
+    .update-bar { position: fixed; left: 50%; bottom: calc(16px + var(--safe-bottom)); transform: translateX(-50%); z-index: 10003; display: flex; align-items: center; gap: 12px; background: var(--brand-gray-900); color: #fff; padding: 8px 8px 8px 16px; border-radius: 999px; box-shadow: 0 4px 16px rgba(0,0,0,.25); font-size: .9rem; white-space: nowrap; }
+
     /* ---------- Fotos ---------- */
     .images { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
     .images:empty { display: none; }
@@ -370,7 +373,10 @@
     .party { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
     .party input { width: 100%; }
     .sig-thumb { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 8px; background: #fff; border: 1px solid var(--brand-gray-200); font-weight: 500; }
-    .sig-thumb img { height: 34px; max-width: 120px; object-fit: contain; display: block; }
+    .sig-thumb img { height: 34px; max-width: 120px; min-width: 0; flex: 0 1 auto; object-fit: contain; object-position: left center; display: block; }
+    .sig-thumb .muted { flex: 0 0 auto; white-space: nowrap; }
+    /* Unterschrift schrumpft, Datum bleibt immer ganz sichtbar */
+    .att-row .att-sig > .sig-thumb { justify-content: space-between; text-overflow: clip; }
     .att-row input { min-height: 38px; padding: 6px 9px; }
     .att-row .sign-btn, .att-row .sig-thumb { min-height: 38px; }
     .proto-status { font-size: .8rem; color: var(--brand-gray-500); margin: -4px 0 6px; }
@@ -393,6 +399,8 @@
       .att-row .att-sig { grid-column: 1; }
       .att-row .att-del { grid-column: 2; justify-self: end; }
       .sig-thumb img { height: 30px; }
+      .sig-thumb { gap: 6px; padding: 2px 6px; }
+      .sig-thumb .muted { font-size: .75rem; }
     }
 
     /* Unterschriftenfeld */

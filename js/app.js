@@ -1597,7 +1597,23 @@ async function checkAccount() {
   window.addEventListener("pagehide", () => { saveNow(); });
   setInterval(() => { if (document.visibilityState === "visible") sync.schedule(0, { full: true }); }, 5 * 60 * 1000);
 
-  if ("serviceWorker" in navigator && location.protocol === "https:") {
-    navigator.serviceWorker.register("sw.js").catch((e) => console.warn("Service Worker", e));
+  // Offline-Speicher: auf der echten Seite (https); lokal nur zum Testen mit ?sw
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || (location.hostname === "localhost" && location.search.includes("sw")))) {
+    // Erste Installation übernimmt still; jede weitere Übernahme = neue Version -> Hinweis
+    let swReady = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })
+      .then((reg) => {
+        // beim Zurückkehren in die App nach neuer Version schauen
+        document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") reg.update().catch(() => {}); });
+      })
+      .catch((e) => console.warn("Service Worker", e));
+    // neue Version übernommen -> Hinweis mit Knopf (kein automatisches Neuladen beim Tippen)
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!swReady) { swReady = true; return; }
+      if ($("#updateBar")) return;
+      const bar = el(`<div id="updateBar" class="update-bar"><span>Neue Version von BauDoc verfügbar</span><button class="primary small" type="button">Jetzt aktualisieren</button></div>`);
+      bar.querySelector("button").onclick = async () => { await saveNow(); location.reload(); };
+      document.body.appendChild(bar);
+    });
   }
 })();
