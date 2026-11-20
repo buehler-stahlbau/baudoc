@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "BauDoc – Baustellendokumentation",
-  "short_name": "BauDoc",
-  "description": "Baustellendokumentation der Friedrich Bühler GmbH & Co. KG",
+  "name": "Gscheidle – Bühler Stahlbau",
+  "short_name": "Gscheidle",
+  "description": "App der Friedrich Bühler GmbH & Co. KG: BauDoc (Doku, Abnahme), BauMon (Montage)",
   "lang": "de",
   "start_url": "./",
   "scope": "./",
