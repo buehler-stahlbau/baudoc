@@ -421,7 +421,12 @@
     .map-pop .star { color: var(--fav); }
     .map-pop .arch-tag { font-size: .7rem; color: var(--brand-gray-500); border: 1px solid var(--brand-gray-200); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
     .map-head { flex-wrap: wrap; }
-    .map-filter { display: flex; gap: 6px; flex-wrap: wrap; }
+    /* drei gleich breite Schalter */
+    .map-filter { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; width: 456px; max-width: 100%; }
+    .map-filter .map-chip { justify-content: center; padding: 0 8px; white-space: nowrap; }
+    .map-chip .map-dot { flex: 0 0 auto; }
+    @media (max-width: 400px){ .map-filter .map-chip { font-size: .78rem; gap: 4px; padding: 0 4px; } .map-chip .map-dot { width: 9px; height: 9px; } }
+    @media (max-width: 340px){ .map-filter .map-chip { font-size: .72rem; gap: 3px; } .map-filter { gap: 4px; } }
     .map-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: 999px; background: #fff; border: 1px solid var(--brand-gray-200); font-size: .85rem; font-weight: 600; color: var(--brand-gray-500); }
     .map-chip .map-dot { margin: 0; width: 11px; height: 11px; box-sizing: border-box; opacity: .45; }
     .map-chip.c-fav .map-dot { background: var(--fav); }
