@@ -51,7 +51,7 @@ BauDoc/
    - Name: `BauDoc`
    - Kontotypen: *Nur Konten in diesem Organisationsverzeichnis*
    - Umleitungs-URI: Plattform **Single-Page-Anwendung (SPA)**,
-     `https://buehler-stahlbau.github.io/baudoc/`
+     `https://buehler-stahlbau.github.io/stahlwork/`
 2. **API-Berechtigungen** (delegiert): `User.Read`, `Files.ReadWrite`
    → ggf. *Administratorzustimmung erteilen*
 3. Von der Übersichtsseite **Anwendungs-ID (Client ID)** und

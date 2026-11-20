@@ -24,7 +24,7 @@ export function isConfigured() { return !!(CONFIG.clientId && window.msal); }
 export function isSignedIn() { return !!account; }
 export function getAccount() { return account; }
 
-// https://buehler-stahlbau.github.io/baudoc/  (ohne index.html)
+// https://buehler-stahlbau.github.io/stahlwork/  (ohne index.html)
 export function redirectUri() {
   return location.origin + location.pathname.replace(/[^/]*$/, "");
 }

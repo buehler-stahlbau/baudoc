@@ -1828,7 +1828,7 @@ function renderSettings(app) {
       : "\n\nIn OneDrive bleibt alles erhalten.";
     if (!confirm(`Alle App-Daten von diesem Gerät löschen und abmelden?${warn}`)) return;
     await resetLocal();
-    try { const dbs = await caches.keys(); await Promise.all(dbs.filter((k) => k.startsWith("baudoc-")).map((k) => caches.delete(k))); } catch {}
+    try { const dbs = await caches.keys(); await Promise.all(dbs.filter((k) => k.startsWith("baudoc-") || k.startsWith("stahlwork-")).map((k) => caches.delete(k))); } catch {}
     od.logout();
   };
   const logoutBtn = $("#logout");
