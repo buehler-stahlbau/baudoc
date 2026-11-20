@@ -31,6 +31,7 @@ function defaultState() {
     remote: { rootId: null, pendingFolderDeletes: [] },
     prefs: { favUpdatedAt: 0, rev: 0, dirty: false }, // Favoriten je Nutzer
     accountId: null,
+    sparte: "doc", // "doc" = BauDoc, "mon" = BauMon
   };
 }
 
@@ -63,7 +64,10 @@ export async function load() {
     S.state = Object.assign(def, saved);
     S.state.remote = Object.assign(defaultState().remote, saved.remote || {});
     S.state.prefs = Object.assign(defaultState().prefs, saved.prefs || {});
-    if (!["projects", "favorites", "map", "archive", "settings"].includes(S.state.view)) S.state.view = "projects";
+    if (!["doc", "mon"].includes(S.state.sparte)) S.state.sparte = "doc";
+    if (!["projects", "favorites", "map", "archive", "settings", "mon"].includes(S.state.view)) S.state.view = "projects";
+    if (S.state.sparte === "doc" && S.state.view === "mon") S.state.view = "projects";
+    if (S.state.sparte === "mon" && S.state.view !== "settings") S.state.view = "mon";
     allProjects().forEach(normalizeProject);
     if (migrated) await saveNow();
   }

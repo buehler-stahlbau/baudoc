@@ -2,7 +2,7 @@
    BauDoc – Oberfläche
    Läuft als App (Home-Bildschirm) und im Browser.
 ========================================================= */
-import { CONFIG, APP_VERSION } from "./config.js";
+import { CONFIG, APP_VERSION, SPARTEN } from "./config.js";
 import * as db from "./db.js";
 import * as od from "./onedrive.js";
 import * as sync from "./sync.js";
@@ -68,7 +68,7 @@ window.addEventListener("unhandledrejection", (e) => {
 ========================================================= */
 function navState() {
   const st = S.state;
-  return { view: st.view, pid: st.selectedProjectId, did: st.selectedDocId };
+  return { view: st.view, pid: st.selectedProjectId, did: st.selectedDocId, sp: st.sparte };
 }
 
 function go(changes, { replace = false, scroll = true } = {}) {
@@ -87,7 +87,9 @@ function go(changes, { replace = false, scroll = true } = {}) {
 window.addEventListener("popstate", (e) => {
   const s = e.state;
   if (!s) return;
-  S.state.view = s.view || "projects";
+  closeDrawer();
+  S.state.sparte = s.sp === "mon" ? "mon" : "doc";
+  S.state.view = s.view || (S.state.sparte === "mon" ? "mon" : "projects");
   S.state.selectedProjectId = s.pid || null;
   S.state.selectedDocId = s.did || null;
   saveSoon();
@@ -264,7 +266,9 @@ function render() {
   updateHeader();
   const st = S.state;
 
-  if (st.view === "archive") renderArchive(app);
+  if (st.view === "settings") renderSettings(app);
+  else if (st.sparte === "mon") renderMon(app);
+  else if (st.view === "archive") renderArchive(app);
   else if (st.view === "settings") renderSettings(app);
   else if (st.view === "map") renderMap(app);
   else {
@@ -285,8 +289,9 @@ function updateHeader() {
     tabFav: "favorites",
     tabMap: "map",
     tabArchive: "archive",
-    tabSettings: "settings",
+    tabMon: "mon",
   };
+  document.body.classList.toggle("sparte-mon", st.sparte === "mon");
   for (const [id, view] of Object.entries(tabs)) {
     const b = $("#" + id);
     b.classList.toggle("active", st.view === view);
@@ -305,6 +310,70 @@ function updateHeader() {
   search.placeholder = st.view === "archive" ? "Archiv durchsuchen …" : "Suchen: Nr., Bauherr, Ort …";
   if (search.value !== filterText) search.value = filterText;
   updateSyncChip();
+}
+
+/* =========================================================
+   Burgermenü: Sparte wechseln (BauDoc, BauMon …) + Einstellungen
+========================================================= */
+const SPARTE_ICONS = {
+  doc: `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 3v2h6V3M8.5 10h7M8.5 14h7M8.5 18h4"/></svg>`,
+  mon: `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a2 2 0 0 0 2.8 2.8l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.3-.5-.5-2.3z"/></svg>`,
+};
+
+function openDrawer() {
+  const st = S.state;
+  $("#drawerSparten").innerHTML = SPARTEN.map((sp) => {
+    const on = st.sparte === sp.id && st.view !== "settings";
+    return `<button type="button" class="drawer-item ${on ? "active" : ""}" data-sparte="${sp.id}" aria-current="${on ? "true" : "false"}">
+      <span class="d-ico">${SPARTE_ICONS[sp.id] || ""}</span>
+      <span class="d-text"><b>${h(sp.name)}</b><small>${h(sp.desc)}</small></span>
+      ${st.sparte === sp.id ? '<svg class="ico d-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : ""}
+    </button>`;
+  }).join("");
+  $$("#drawerSparten [data-sparte]").forEach((b) => {
+    b.onclick = () => {
+      const sp = b.dataset.sparte;
+      closeDrawer();
+      if (sp === st.sparte && st.view !== "settings") { window.scrollTo(0, 0); return; }
+      go({ sparte: sp, view: sp === "mon" ? "mon" : "projects", selectedProjectId: null, selectedDocId: null });
+    };
+  });
+  $("#drawerSettings").classList.toggle("active", st.view === "settings");
+  $("#drawerVer").textContent = "Version " + APP_VERSION;
+  $("#drawer").hidden = false;
+  document.body.classList.add("drawer-open");
+  $("#menuBtn").setAttribute("aria-expanded", "true");
+}
+
+function closeDrawer() {
+  const d = $("#drawer");
+  if (!d || d.hidden) return;
+  d.hidden = true;
+  document.body.classList.remove("drawer-open");
+  $("#menuBtn").setAttribute("aria-expanded", "false");
+}
+
+function setupDrawer() {
+  $("#menuBtn").onclick = () => ($("#drawer").hidden ? openDrawer() : closeDrawer());
+  $$("#drawer [data-close]").forEach((b) => (b.onclick = closeDrawer));
+  $("#drawerSettings").onclick = () => {
+    closeDrawer();
+    if (S.state.view === "settings") return;
+    go({ view: "settings", selectedProjectId: null, selectedDocId: null });
+  };
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+}
+
+// BauMon (Montage): Bereich in Vorbereitung
+function renderMon(app) {
+  app.appendChild(el(`
+    <div class="page-head"><h1>BauMon</h1></div>`));
+  app.appendChild(el(`
+    <div class="card mon-empty">
+      <div class="mon-ico">${SPARTE_ICONS.mon}</div>
+      <h2>Montage</h2>
+      <p class="muted">Dieser Bereich ist in Vorbereitung.</p>
+    </div>`));
 }
 
 function setupSearch() {
@@ -382,10 +451,10 @@ function updateSyncChip() {
   chip.className = "sync-chip " + s.kind;
   chip.title = titles[s.kind] || "";
   chip.setAttribute("aria-label", titles[s.kind] || "Synchronisierung");
-  const dot = $("#syncDot");
-  if (dot) dot.className = "sync-dot " + s.kind;
-  const set = $("#tabSettings");
-  if (set) set.title = "Einstellungen" + (titles[s.kind] ? " – " + titles[s.kind] : "");
+  const mdot = $("#menuDot");
+  if (mdot) mdot.className = "sync-dot " + s.kind;
+  const dsync = $("#drawerSync");
+  if (dsync) dsync.textContent = titles[s.kind] ? titles[s.kind].replace(/ – klicken.*$/, "") : "Anmeldung, Synchronisierung";
   chip.onclick = () => {
     if (s.kind === "signedout") { od.login(); return; }
     if (s.kind === "error") { toast(s.message || "Unbekannter Fehler", "error", 8000); sync.run({ full: true }); return; }
@@ -1847,6 +1916,7 @@ async function checkAccount() {
   await checkAccount();
 
   setupSearch();
+  setupDrawer();
   sync.onStatus(() => updateSyncChip());
   sync.onData(() => requestRender());
   onChange((kind) => {

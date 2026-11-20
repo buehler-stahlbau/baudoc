@@ -21,4 +21,10 @@ export const CONFIG = {
   scopes: ["User.Read", "Files.ReadWrite"],
 };
 
-export const APP_VERSION = "3.3.2-beta";
+// Sparten der App (später je Nutzer freischaltbar)
+export const SPARTEN = [
+  { id: "doc", name: "BauDoc", desc: "Baustellendokumentation" },
+  { id: "mon", name: "BauMon", desc: "Montage" },
+];
+
+export const APP_VERSION = "3.4.0-beta";

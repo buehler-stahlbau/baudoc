@@ -113,8 +113,9 @@
 
     /* Sync-Punkt am Zahnrad (nur App-Ansicht) */
     .sync-dot { display: none; position: absolute; top: 3px; right: 3px; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff; background: var(--brand-gray-500); }
-    .sync-dot.idle { background: var(--ok); }
-    .sync-dot.pending, .sync-dot.syncing { background: var(--brand-primary); }
+    .sync-dot.idle { background: #2fb35a; }
+    /* wartet / läuft: blauer Ring statt Punkt – deutlich anders als Grün */
+    .sync-dot.pending, .sync-dot.syncing { background: #fff; box-shadow: inset 0 0 0 3px var(--brand-primary); width: 13px; height: 13px; }
     .sync-dot.signedout { background: var(--warn); }
     .sync-dot.error { background: var(--brand-red); }
     .sync-dot.off { display: none !important; }
@@ -127,8 +128,6 @@
       #tabFav { width: 172px; }
       #tabArchive { width: 150px; }
       #tabMap { width: 112px; }
-      #tabSettings { width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 50%; justify-content: center; }
-      #tabSettings .label { display: none; }
     }
     /* Mittlere Breite: nur Symbole, Zahl als Abzeichen (wie am Handy) */
     @media (max-width: 1050px){
@@ -149,6 +148,7 @@
       .tab.active .cnt { background: #fff; color: var(--brand-gray-900); border-color: var(--brand-gray-700); }
       .sync-chip { display: none; }
       .sync-dot { display: block; }
+      .menu-btn { width: 36px; }
       .appbar .logo { height: 22px; margin-left: auto; }
       .search-wrap { display: none; }
       /* Suche aufgeklappt: Feld legt sich über die Zeile */
@@ -159,13 +159,54 @@
     @media (max-width: 400px){
       .tabs, .appbar-inner { gap: 4px; }
       .tab, #searchBtn { width: 40px; height: 40px; }
+      .menu-btn { width: 32px; height: 40px; }
       .appbar .logo { height: 17px; }
     }
     @media (max-width: 350px){
       .tab, #searchBtn { width: 36px; height: 36px; }
+      .menu-btn { width: 30px; height: 36px; }
       .ico { width: 20px; height: 20px; }
       .appbar .logo { height: 14px; }
     }
+
+    /* ---------- Burgermenü ---------- */
+    .menu-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 44px; min-height: 0; padding: 0; flex: 0 0 auto; border: 0; border-radius: 10px; background: transparent; color: var(--brand-gray-900); cursor: pointer; }
+    .menu-btn .ico { width: 26px; height: 26px; }
+    @media (hover: hover) and (pointer: fine){ .menu-btn:hover { background: var(--brand-gray-100); } }
+    .menu-btn .sync-dot { top: 6px; right: 2px; }
+    #tabMon { display: none; }
+    body.sparte-mon #tabMon { display: inline-flex; }
+    body.sparte-mon #tabProjects, body.sparte-mon #tabFav, body.sparte-mon #tabMap, body.sparte-mon #tabArchive,
+    body.sparte-mon .search-wrap, body.sparte-mon #searchBtn { display: none !important; }
+    body.sparte-mon .appbar .logo { margin-left: auto; }
+    @media (min-width: 1051px){ #tabMon { width: 150px; } }
+    body.locked .menu-btn { display: none; }
+    .drawer { position: fixed; inset: 0; z-index: 200; }
+    .drawer[hidden] { display: none; }
+    .drawer-backdrop { position: absolute; inset: 0; background: rgba(20,20,18,.35); animation: fadeIn .15s ease-out; }
+    .drawer-panel { position: absolute; top: 0; bottom: 0; left: 0; width: min(320px, 86vw); background: #fff; box-shadow: 4px 0 24px rgba(0,0,0,.18); display: flex; flex-direction: column; padding: calc(10px + var(--safe-top)) 12px calc(12px + var(--safe-bottom)) calc(12px + var(--safe-left)); overflow-y: auto; animation: slideIn .18s ease-out; }
+    @keyframes slideIn { from { transform: translateX(-100%); } to { transform: none; } }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 12px; border-bottom: 1px solid var(--brand-gray-200); margin-bottom: 10px; }
+    .drawer-head .logo { height: 26px; width: auto; }
+    .drawer-close { width: 40px; height: 40px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--brand-gray-700); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+    .drawer-title { font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--brand-gray-500); margin: 6px 8px 6px; }
+    .drawer-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px; margin: 2px 0; min-height: 56px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: var(--brand-gray-900); font: inherit; cursor: pointer; }
+    @media (hover: hover) and (pointer: fine){ .drawer-item:hover { background: var(--brand-gray-100); } }
+    .drawer-item .d-ico { width: 40px; height: 40px; flex: 0 0 auto; border-radius: 10px; background: var(--brand-gray-100); display: inline-flex; align-items: center; justify-content: center; color: var(--brand-gray-700); }
+    .drawer-item .d-text { display: flex; flex-direction: column; min-width: 0; }
+    .drawer-item .d-text b { font-weight: 700; }
+    .drawer-item .d-text small { color: var(--brand-gray-500); font-size: .82rem; }
+    .drawer-item.active { background: var(--brand-gray-100); border-color: var(--brand-gray-200); }
+    .drawer-item.active .d-ico { background: var(--brand-gray-700); color: #fff; }
+    .drawer-item .d-check { margin-left: auto; color: var(--brand-gray-700); }
+    .drawer-sep { height: 1px; background: var(--brand-gray-200); margin: 10px 4px; }
+    .drawer-foot { margin-top: auto; padding: 12px 8px 0; font-size: .78rem; }
+    body.drawer-open { overflow: hidden; }
+    .mon-empty { text-align: center; padding: 36px 16px; }
+    .mon-empty h2 { margin: 10px 0 4px; }
+    .mon-ico { display: inline-flex; width: 64px; height: 64px; border-radius: 16px; background: var(--brand-gray-100); align-items: center; justify-content: center; color: var(--brand-gray-700); }
+    .mon-ico .ico { width: 32px; height: 32px; }
 
     /* ---------- Inhalt ---------- */
     .container { max-width: 1200px; margin: 0 auto; padding: 14px calc(14px + var(--safe-right)) calc(40px + var(--safe-bottom)) calc(14px + var(--safe-left)); }
@@ -333,7 +374,7 @@
     .cam-shutter:not(:disabled):active { transform: scale(.94); }
 
     /* ---------- Anmeldepflicht ---------- */
-    body.locked .tabs, body.locked .search-wrap, body.locked #searchBtn, body.locked #tabSettings, body.locked #syncChip { display: none !important; }
+    body.locked .tabs, body.locked .search-wrap, body.locked #searchBtn, body.locked #syncChip { display: none !important; }
     body.locked .appbar { display: none; } /* Logo steht in der Anmeldekarte */
     .login-wrap { display: flex; justify-content: center; padding-top: 6vh; }
     .login-card { width: min(420px, 100%); text-align: center; padding: 28px 22px; }
@@ -520,7 +561,9 @@
 <body>
   <header class="appbar" id="appbar">
     <div class="appbar-inner">
+      <button id="menuBtn" class="menu-btn" type="button" title="Menü" aria-label="Menü" aria-haspopup="dialog" aria-controls="drawer"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="sync-dot off" id="menuDot"></span></button>
       <nav class="tabs" aria-label="Hauptmenü">
+        <button id="tabMon" class="tab" type="button" title="Montage" aria-label="Montage"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a2 2 0 0 0 2.8 2.8l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.3-.5-.5-2.3z"/></svg><span class="label">Montage</span></button>
         <button id="tabProjects" class="tab" type="button" title="Bauvorhaben" aria-label="Bauvorhaben"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V8l7-5 7 5v13"/><path d="M10 21v-5h4v5"/><path d="M9 10h1M14 10h1M9 13h1M14 13h1"/></svg><span class="label">Bauvorhaben</span><span class="cnt" id="cntProjects"></span></button>
         <button id="tabFav" class="tab" type="button" title="Favoriten" aria-label="Favoriten"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l2.8 5.9 6.2.7-4.6 4.3 1.2 6.1L12 17l-5.6 3 1.2-6.1L3 9.6l6.2-.7z"/></svg><span class="label">Favoriten</span><span class="cnt" id="cntFav"></span></button>
         <button id="tabMap" class="tab" type="button" title="Karte" aria-label="Karte"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4L3 6.5v13L9 17l6 2.5 6-2.5v-13L15 6.5 9 4z"/><path d="M9 4v13M15 6.5v13"/></svg><span class="label">Karte</span></button>
@@ -532,11 +575,26 @@
         <button id="searchClose" class="search-close secondary" type="button" aria-label="Suche schließen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <button id="searchBtn" class="tab" type="button" title="Suchen" aria-label="Suchen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></button>
-      <button id="tabSettings" class="tab" type="button" title="Einstellungen" aria-label="Einstellungen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="label">Einstellungen</span><span class="sync-dot off" id="syncDot"></span></button>
       <button id="syncChip" class="sync-chip off" type="button">Nur lokal</button>
       <img class="logo" src="logo.png" alt="Bühler Stahlbau" />
     </div>
   </header>
+
+  <!-- Burgermenü: Sparte wechseln -->
+  <div id="drawer" class="drawer" hidden>
+    <div class="drawer-backdrop" data-close></div>
+    <aside class="drawer-panel" role="dialog" aria-modal="true" aria-label="Menü">
+      <div class="drawer-head">
+        <img class="logo" src="logo.png" alt="Bühler Stahlbau" />
+        <button class="drawer-close" type="button" data-close aria-label="Menü schließen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="drawer-title">Sparte</div>
+      <div id="drawerSparten"></div>
+      <div class="drawer-sep"></div>
+      <button class="drawer-item" id="drawerSettings" type="button"><span class="d-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="d-text"><b>Einstellungen</b><small id="drawerSync">Anmeldung, Synchronisierung</small></span></button>
+      <div class="drawer-foot muted" id="drawerVer"></div>
+    </aside>
+  </div>
 
   <main class="container">
     <div id="app"><p class="muted">BauDoc wird geladen …</p></div>
