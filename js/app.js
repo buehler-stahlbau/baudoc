@@ -654,8 +654,8 @@ function pinIcon(L, counts, cluster = false) {
     </svg></div>`, iconSize: [34, H], iconAnchor: [12, H - 1], popupAnchor: [0, -(H - 5)] });
 }
 
-// Startausschnitt: Altensteig in der Mitte, ca. 150 km Umkreis
-const MAP_HOME = { lat: 48.5866, lon: 8.6046, radiusKm: 150 };
+// Startausschnitt: Altensteig in der Mitte, ca. 65 km Umkreis (Karlsruhe, Stuttgart, Straßburg)
+const MAP_HOME = { lat: 48.5866, lon: 8.6046, radiusKm: 65 };
 function homeBounds() {
   const dLat = MAP_HOME.radiusKm / 111.32;
   const dLon = MAP_HOME.radiusKm / (111.32 * Math.cos((MAP_HOME.lat * Math.PI) / 180));
