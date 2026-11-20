@@ -241,7 +241,7 @@ function renderLogin(app) {
       <div class="card login-card">
         <img class="login-logo" src="logo.png" alt="Bühler Stahlbau" />
         <h1>Stahlwork</h1>
-        <p class="muted">Baustellendokumentation der Friedrich Bühler GmbH &amp; Co. KG</p>
+        <p class="muted">Anwendung der Friedrich Bühler GmbH &amp; Co. KG</p>
         <p>Bitte mit dem <strong>Bühler-Firmenkonto</strong> anmelden.</p>
         <button class="primary block" id="loginGate" type="button" ${offline ? "disabled" : ""}>Mit Microsoft anmelden</button>
         ${offline ? `<p class="muted">Für die erste Anmeldung wird eine Internetverbindung benötigt.</p>` : ""}
