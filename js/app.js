@@ -613,27 +613,23 @@ function pinHtml(color, count) {
     </svg></div>`;
 }
 
-// Gemeinsamer Pin: Kopf links gold (★ Favoriten), rechts grau (weitere), eine Spitze
-function splitPinHtml(nFav, nOther) {
-  const t1 = nFav > 99 ? "99+" : String(nFav);
+// Gemischter Ort: gleicher Pin-Umriss wie alle anderen (grau, Anzahl weitere),
+// dazu ein goldenes Abzeichen oben rechts mit der Anzahl Favoriten
+function mixedPinHtml(nFav, nOther) {
   const t2 = nOther > 99 ? "99+" : String(nOther);
-  const cw = 7.4;                                   // Breite je Ziffer
-  const w1 = Math.round(9 + 10 + 3 + t1.length * cw + 9); // Rand + Stern + Abstand + Zahl + Rand
-  const w2 = Math.max(24, Math.round(9 + t2.length * cw + 9));
-  const w = w1 + w2, hgt = 24, r = 12, tip = w / 2;
-  return {
-    w: w + 4,
-    html: `<div class="pin split" data-fav="${nFav}" data-other="${nOther}"><svg viewBox="-2 -2 ${w + 4} 42" width="${w + 4}" height="42" aria-hidden="true">
-      <path d="M${tip - 7} ${hgt - 1}L${tip} 38L${tip + 7} ${hgt - 1}Z" fill="#5f5e59" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
-      <rect x="0" y="0" width="${w}" height="${hgt}" rx="${r}" fill="#fff"/>
-      <path d="M${r} 1.5H${w1}V${hgt - 1.5}H${r}A${r - 1.5} ${r - 1.5} 0 0 1 ${r} 1.5Z" fill="#d6a21c"/>
-      <path d="M${w1} 1.5H${w - r}A${r - 1.5} ${r - 1.5} 0 0 1 ${w - r} ${hgt - 1.5}H${w1}Z" fill="#8d8c87"/>
-      <path d="M${tip - 6} ${hgt - 1.6}L${tip} ${hgt + 5}L${tip + 6} ${hgt - 1.6}Z" fill="#5f5e59"/>
-      <text x="9" y="${hgt / 2 + 0.5}" text-anchor="start" dominant-baseline="central" font-family="system-ui, sans-serif" font-size="10" fill="#fff">★</text>
-      <text x="${9 + 10 + 3 + (t1.length * cw) / 2}" y="${hgt / 2 + 0.5}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="12" fill="#fff">${t1}</text>
-      <text x="${w1 + w2 / 2}" y="${hgt / 2 + 0.5}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="12" fill="#fff">${t2}</text>
-    </svg></div>`,
-  };
+  const t1 = nFav > 99 ? "99+" : String(nFav);
+  const s2 = t2.length >= 3 ? 8.5 : t2.length === 2 ? 11 : 12.5;
+  const s1 = t1.length >= 3 ? 7 : t1.length === 2 ? 9 : 10.5;
+  const br = t1.length >= 2 ? 10 : 9; // Radius Abzeichen
+  return `<div class="pin mixed" data-fav="${nFav}" data-other="${nOther}"><svg viewBox="0 0 46 46" width="46" height="46" aria-hidden="true">
+      <g transform="translate(0 4)">
+        <path d="M16 41s13-12.6 13-24A13 13 0 0 0 3 17c0 11.4 13 24 13 24z" fill="#8d8c87" stroke="#fff" stroke-width="2"/>
+        <circle cx="16" cy="15" r="9.5" fill="#fff"/>
+        <text x="16" y="15" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${s2}" fill="#2b2b28">${t2}</text>
+      </g>
+      <circle cx="${46 - br - 1.5}" cy="${br + 1.5}" r="${br}" fill="#d6a21c" stroke="#fff" stroke-width="2"/>
+      <text x="${46 - br - 1.5}" y="${br + 1.5}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${s1}" fill="#fff">${t1}</text>
+    </svg></div>`;
 }
 
 // Startausschnitt: Altensteig in der Mitte, ca. 150 km Umkreis
@@ -702,10 +698,10 @@ function renderMap(app) {
     const byNum = (a, b) => a.number.localeCompare(b.number);
     for (const g of groups.values()) {
       const total = g.fav.length + g.other.length;
-      // ein Pin je Ort; bei Favoriten + weiteren: zweigeteilter Kopf (gold | grau), eine Spitze
+      // ein Pin je Ort, gleicher Umriss; bei Favoriten + weiteren: goldenes Abzeichen mit Anzahl Favoriten
       const mixed = g.fav.length && g.other.length;
       const icon = mixed
-        ? (() => { const sp = splitPinHtml(g.fav.length, g.other.length); return L.divIcon({ className: "", html: sp.html, iconSize: [sp.w, 40], iconAnchor: [sp.w / 2, 39], popupAnchor: [0, -36] }); })()
+        ? L.divIcon({ className: "", html: mixedPinHtml(g.fav.length, g.other.length), iconSize: [46, 46], iconAnchor: [16, 45], popupAnchor: [0, -40] })
         : L.divIcon({ className: "", html: pinHtml(g.fav.length ? "#d6a21c" : "#8d8c87", total), iconSize: [32, 42], iconAnchor: [16, 41], popupAnchor: [0, -38] });
       const m = L.marker([g.lat, g.lon], { icon, title: `${g.place}: ${total} BV` }).addTo(map);
       const sorted = [...g.fav.slice().sort(byNum), ...g.other.slice().sort(byNum)];
