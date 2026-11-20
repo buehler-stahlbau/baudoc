@@ -1,8 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#474642"/>
-  <path d="M290 34V96" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
-  <rect x="248" y="90" width="84" height="66" rx="16" fill="#fff"/>
-  <path d="M290 156V246A34 34 0 0 1 222 246V226" fill="none" stroke="#fff" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M215 222L222 206L229 222Z" fill="#fff" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
-  <path d="M256 280L132 340M256 280L380 340" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
-  <rect x="96" y="338" width="320" height="76" rx="6" fill="#ca322d"/>
-  <path d="M104 358H408M104 394H408" stroke="#a82722" stroke-width="6"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#474642"/><path d="M256 40V118" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
+  <rect x="214" y="108" width="84" height="62" rx="14" fill="#fff"/>
+  <path d="M256 178L150 300M256 178L362 300" stroke="#fff" stroke-width="12" stroke-linecap="round"/>
+  <rect x="96" y="300" width="320" height="70" rx="8" fill="#ca322d"/></svg>

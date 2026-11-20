@@ -240,13 +240,13 @@ function renderLogin(app) {
     <div class="login-wrap">
       <div class="card login-card">
         <img class="login-logo" src="logo.png" alt="Bühler Stahlbau" />
-        <h1>Gscheidle</h1>
+        <h1>Stahlwork</h1>
         <p class="muted">Baustellendokumentation der Friedrich Bühler GmbH &amp; Co. KG</p>
         <p>Bitte mit dem <strong>Bühler-Firmenkonto</strong> anmelden.</p>
         <button class="primary block" id="loginGate" type="button" ${offline ? "disabled" : ""}>Mit Microsoft anmelden</button>
         ${offline ? `<p class="muted">Für die erste Anmeldung wird eine Internetverbindung benötigt.</p>` : ""}
         ${loginError ? `<p class="error-text">${h(loginError)}</p>` : ""}
-        <p class="muted login-hint">Nach der Anmeldung funktioniert Gscheidle auf diesem Gerät auch ohne Netz.</p>
+        <p class="muted login-hint">Nach der Anmeldung funktioniert Stahlwork auf diesem Gerät auch ohne Netz.</p>
       </div>
     </div>`));
   const b = $("#loginGate");
@@ -345,7 +345,7 @@ function openDrawer() {
     };
   });
   $("#drawerSettings").classList.toggle("active", st.view === "settings");
-  $("#drawerVer").textContent = "Gscheidle " + APP_VERSION;
+  $("#drawerVer").textContent = "Stahlwork " + APP_VERSION;
   $("#drawer").hidden = false;
   document.body.classList.add("drawer-open");
   $("#menuBtn").setAttribute("aria-expanded", "true");
@@ -1685,19 +1685,19 @@ window.addEventListener("beforeinstallprompt", (e) => {
 });
 
 function installHtml() {
-  if (isStandalone()) return `<p>✓ Gscheidle läuft als App.</p>`;
+  if (isStandalone()) return `<p>✓ Läuft als App.</p>`;
   if (deferredInstall) return `
-    <p class="muted">Gscheidle als App installieren: eigenes Symbol auf dem Startbildschirm, Vollbild, schneller Start.</p>
+    <p class="muted">Stahlwork installieren: eigenes Symbol auf dem Startbildschirm, Vollbild, schneller Start.</p>
     <button class="primary" id="installBtn" type="button">App installieren</button>`;
   if (isIOS) return `
-    <p class="muted">So wird Gscheidle zur App auf dem iPhone/iPad:</p>
+    <p class="muted">So wird Stahlwork auf dem iPhone/iPad installiert:</p>
     <ol class="steps">
       <li>Diese Seite in <strong>Safari</strong> öffnen</li>
       <li>Unten auf <strong>Teilen</strong> tippen (Quadrat mit Pfeil nach oben)</li>
       <li><strong>„Zum Home-Bildschirm“</strong> wählen</li>
     </ol>
     <p class="muted">Wichtig: Als App bleiben die Daten auf dem Gerät dauerhaft gespeichert.</p>`;
-  return `<p class="muted">Im Browser-Menü <strong>„App installieren“</strong> bzw. <strong>„Zum Startbildschirm hinzufügen“</strong> wählen. Im Browser am PC funktioniert Gscheidle auch ohne Installation.</p>`;
+  return `<p class="muted">Im Browser-Menü <strong>„App installieren“</strong> bzw. <strong>„Zum Startbildschirm hinzufügen“</strong> wählen. Im Browser am PC funktioniert Stahlwork auch ohne Installation.</p>`;
 }
 
 function renderSettings(app) {
@@ -1705,7 +1705,7 @@ function renderSettings(app) {
   let odHtml;
   if (!od.isConfigured()) {
     odHtml = `
-      <p><strong>Noch nicht eingerichtet.</strong> Gscheidle speichert derzeit nur auf diesem Gerät.</p>
+      <p><strong>Noch nicht eingerichtet.</strong> Stahlwork speichert derzeit nur auf diesem Gerät.</p>
       <p class="muted">Für OneDrive muss die App bei Microsoft registriert und die Anwendungs-ID in <code>js/config.js</code> eingetragen werden (siehe README).</p>`;
   } else if (!od.isSignedIn()) {
     odHtml = `
@@ -1756,7 +1756,7 @@ function renderSettings(app) {
       <h3 class="section-title">Speicher auf diesem Gerät</h3>
       <p class="muted" id="storageInfo">wird ermittelt …</p>
     </div>`));
-  app.appendChild(el(`<p class="muted center">Gscheidle ${h(APP_VERSION)}</p>`));
+  app.appendChild(el(`<p class="muted center">Stahlwork ${h(APP_VERSION)}</p>`));
 
   const loginBtn = $("#login");
   if (loginBtn) loginBtn.onclick = () => od.login();
@@ -1768,7 +1768,7 @@ function renderSettings(app) {
     const warn = pending
       ? `\n\nACHTUNG: ${pending} Änderung(en) sind noch NICHT in OneDrive und gehen dabei verloren!`
       : "\n\nIn OneDrive bleibt alles erhalten.";
-    if (!confirm(`Alle Gscheidle-Daten von diesem Gerät löschen und abmelden?${warn}`)) return;
+    if (!confirm(`Alle App-Daten von diesem Gerät löschen und abmelden?${warn}`)) return;
     await resetLocal();
     try { const dbs = await caches.keys(); await Promise.all(dbs.filter((k) => k.startsWith("baudoc-")).map((k) => caches.delete(k))); } catch {}
     od.logout();
@@ -1852,7 +1852,7 @@ function renderSettings(app) {
           (est ? `Belegt: ${mb(est.usage || 0)}<br>` : "") +
           (persisted || isStandalone()
             ? "Daten sind vor automatischem Löschen geschützt ✓"
-            : "Daten sind <strong>nicht</strong> vor automatischem Löschen durch den Browser geschützt. Tipp: Gscheidle als App installieren (siehe oben).");
+            : "Daten sind <strong>nicht</strong> vor automatischem Löschen durch den Browser geschützt. Tipp: Stahlwork installieren (siehe oben).");
       }
     } catch {
       if (info) info.textContent = "Keine Angaben verfügbar.";
@@ -1959,7 +1959,7 @@ async function checkAccount() {
     navigator.serviceWorker.addEventListener("controllerchange", () => {
       if (!swReady) { swReady = true; return; }
       if ($("#updateBar")) return;
-      const bar = el(`<div id="updateBar" class="update-bar"><span>Neue Version von Gscheidle verfügbar</span><button class="primary small" type="button">Jetzt aktualisieren</button></div>`);
+      const bar = el(`<div id="updateBar" class="update-bar"><span>Neue Version von Stahlwork verfügbar</span><button class="primary small" type="button">Jetzt aktualisieren</button></div>`);
       bar.querySelector("button").onclick = async () => { await saveNow(); location.reload(); };
       document.body.appendChild(bar);
     });
