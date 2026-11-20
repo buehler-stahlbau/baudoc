@@ -291,13 +291,16 @@ function updateHeader() {
     tabArchive: "archive",
     tabMon: "mon",
   };
+  const inSettings = st.view === "settings";
   document.body.classList.toggle("sparte-mon", st.sparte === "mon");
-  // oben rechts: Logo der aktuellen Sparte (Bühler-Logo nur im Burgermenü)
+  document.body.classList.toggle("view-settings", inSettings); // Einstellungen gehören zu keiner Sparte
+  // oben rechts: Logo der aktuellen Sparte, in den Einstellungen das Stahlwork-Logo
   const sp = SPARTEN.find((x) => x.id === st.sparte) || SPARTEN[0];
+  const logo = inSettings ? { icon: "app-logo.svg", name: "Stahlwork" } : sp;
   const li = $("#sparteLogoImg");
-  if (li.getAttribute("src") !== sp.icon) li.setAttribute("src", sp.icon);
-  li.alt = sp.name;
-  $("#sparteLogo").title = sp.name + " – Menü öffnen";
+  if (li.getAttribute("src") !== logo.icon) li.setAttribute("src", logo.icon);
+  li.alt = logo.name;
+  $("#sparteLogo").title = logo.name + " – Menü öffnen";
   for (const [id, view] of Object.entries(tabs)) {
     const b = $("#" + id);
     b.classList.toggle("active", st.view === view);
@@ -326,6 +329,8 @@ const SPARTE_ICONS = {
   mon: `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.6 17.4a2 2 0 0 0 2.8 2.8l5.7-5.7a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.3-.5-.5-2.3z"/></svg>`,
 };
 
+const CHECK_ICO = '<svg class="ico d-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
 function openDrawer() {
   const st = S.state;
   $("#drawerSparten").innerHTML = SPARTEN.map((sp) => {
@@ -333,7 +338,7 @@ function openDrawer() {
     return `<button type="button" class="drawer-item ${on ? "active" : ""}" data-sparte="${sp.id}" aria-current="${on ? "true" : "false"}">
       <span class="d-ico${sp.icon ? " img" : ""}">${sp.icon ? `<img src="${h(sp.icon)}" alt="">` : SPARTE_ICONS[sp.id] || ""}</span>
       <span class="d-text"><b>${h(sp.name)}</b><small>${h(sp.desc)}</small></span>
-      ${st.sparte === sp.id ? '<svg class="ico d-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : ""}
+      ${on ? CHECK_ICO : ""}
     </button>`;
   }).join("");
   $$("#drawerSparten [data-sparte]").forEach((b) => {
@@ -344,7 +349,10 @@ function openDrawer() {
       go({ sparte: sp, view: sp === "mon" ? "mon" : "projects", selectedProjectId: null, selectedDocId: null });
     };
   });
-  $("#drawerSettings").classList.toggle("active", st.view === "settings");
+  const ds = $("#drawerSettings");
+  ds.classList.toggle("active", st.view === "settings");
+  ds.querySelector(".d-check")?.remove();
+  if (st.view === "settings") ds.insertAdjacentHTML("beforeend", CHECK_ICO);
   $("#drawerVer").textContent = "Stahlwork " + APP_VERSION;
   $("#drawer").hidden = false;
   document.body.classList.add("drawer-open");
