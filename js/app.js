@@ -1716,7 +1716,7 @@ function renderSettings(app) {
     const acc = od.getAccount();
     odHtml = `
       <p>Angemeldet als <strong>${h(acc.name || acc.username)}</strong><br><span class="muted">${h(acc.username || "")}</span></p>
-      <p class="muted">Ablage: OneDrive › ${h(CONFIG.appFolder)} › ${h(CONFIG.rootFolder)}<br>
+      <p class="muted">Ablage: OneDrive › ${h(CONFIG.appFolder)}<br>
         Zuletzt synchronisiert: ${s.lastSync ? formatDateTimeDE(s.lastSync) : "–"}<br>
         Ausstehend: ${s.pending}${s.kind === "error" ? `<br><span class="error-text">Fehler: ${h(s.message)}</span>` : ""}</p>
       <div class="row wrap">
