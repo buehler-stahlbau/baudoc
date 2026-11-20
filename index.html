@@ -487,6 +487,15 @@
     #chkCode { text-transform: uppercase; font-variant-numeric: tabular-nums; letter-spacing: .05em; }
     .check-result { margin-top: 10px; font-size: .9rem; line-height: 1.45; }
     .check-result:empty { display: none; }
+    .link-btn { display: inline; padding: 0; min-height: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; text-align: left; text-decoration: underline; cursor: pointer; }
+    .pdf-versions { list-style: none; margin: 8px 0 4px; padding: 0; color: var(--brand-gray-900); font-size: .85rem; }
+    .pdf-versions li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 5px 8px; border-radius: 8px; }
+    .pdf-versions li.hit { background: var(--brand-gray-100); font-weight: 600; }
+    .pdf-versions code { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+    .pdf-versions em { font-style: normal; font-size: .72rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; }
+    .pdf-versions em.cur { background: rgba(22,128,61,.12); color: var(--ok); }
+    .pdf-versions em.you { background: var(--brand-gray-200); color: var(--brand-gray-900); }
+    .small-note { font-size: .8rem; margin-top: 4px; }
     .check-result.ok { color: var(--ok); }
     .check-result.warn { color: var(--warn); }
     .check-result.bad { color: var(--brand-red-dark); }
@@ -580,7 +589,7 @@
       </nav>
       <div class="search-wrap" id="searchWrap">
         <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-        <input id="search" type="search" placeholder="Suchen: Nr., Bauherr, Ort …" autocomplete="off" enterkeyhint="search" aria-label="Suchen" />
+        <input id="search" type="search" placeholder="Nr., Bauherr, Ort, Prüfcode" autocomplete="off" enterkeyhint="search" aria-label="Suchen" />
         <button id="searchClose" class="search-close secondary" type="button" aria-label="Suche schließen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <button id="searchBtn" class="tab" type="button" title="Suchen" aria-label="Suchen"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></button>

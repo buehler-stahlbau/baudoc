@@ -316,7 +316,7 @@ function updateHeader() {
 
   $("#searchBtn").classList.toggle("active", !!filterText.trim());
   const search = $("#search");
-  search.placeholder = st.view === "archive" ? "Archiv durchsuchen …" : "Suchen: Nr., Bauherr, Ort …";
+  search.placeholder = st.view === "archive" ? "Archiv: Nr., Bauherr, Ort, Prüfcode" : "Nr., Bauherr, Ort, Prüfcode";
   if (search.value !== filterText) search.value = filterText;
   updateSyncChip();
 }
@@ -414,8 +414,8 @@ function setupSearch() {
     const st = S.state;
     if (!filterText.trim()) {
       if (!st.selectedProjectId && st.view !== "settings") render();
-    } else if (st.view === "settings" || st.selectedProjectId) {
-      go({ view: st.view === "settings" ? "projects" : st.view, selectedProjectId: null, selectedDocId: null }, { replace: true });
+    } else if (st.view === "settings" || st.view === "map" && searchCode() || st.selectedProjectId) {
+      go({ view: st.view === "settings" || st.view === "map" ? "projects" : st.view, selectedProjectId: null, selectedDocId: null }, { replace: true });
     } else {
       render();
     }
@@ -429,6 +429,62 @@ function setupSearch() {
     }
     if (e.key === "Escape") closeSearch();
   });
+}
+
+/* ---------- Prüfcode über die Suche ----------
+   Ein 8-stelliger Code (z. B. 7F3A-91C2) in der Suche wird als Prüfcode eines PDFs geprüft. */
+function searchCode() {
+  const q = filterText.trim();
+  return /^[0-9a-f]{4}[\s-]?[0-9a-f]{4}$/i.test(q) ? normalizeCode(q) : null;
+}
+
+function checkCode(code) {
+  const current = [], older = [];
+  let notLoaded = 0;
+  for (const p of allProjects()) {
+    if (!p.docs) { notLoaded++; continue; }
+    for (const d of p.docs) {
+      if (contentCode(p, d) === code) current.push({ p, d });
+      else {
+        const hit = (d.pdfCodes || []).filter((x) => x.code === code).pop();
+        if (hit) older.push({ p, d, at: hit.at });
+      }
+    }
+  }
+  const link = (x) => {
+    const arch = S.state.archivedProjects.includes(x.p);
+    const txt = `BV ${h(x.p.number)} ${h(x.p.client || x.p.title)} – „${h(x.d.title)}“ vom ${formatDateDE(x.d.date)}${arch ? " (Archiv)" : ""}`;
+    return arch ? txt : `<button type="button" class="link-btn" data-open-pid="${h(x.p.id)}" data-open-did="${h(x.d.id)}">${txt}</button>`;
+  };
+  // alle PDF-Stände der Doku: Version, Datum, Code; gesuchter und aktueller Stand markiert
+  const versions = (x) => {
+    const cur = contentCode(x.p, x.d);
+    const list = (x.d.pdfCodes || []).map((v, i) => ({ ...v, n: i + 1 }));
+    if (!list.length) return "";
+    return `<ol class="pdf-versions">${list.slice().reverse().map((v) =>
+      `<li class="${v.code === code ? "hit" : ""}"><span>Stand ${v.n}</span><span>${formatDateTimeDE(v.at)}</span><code>${v.code}</code>${v.code === cur ? '<em class="cur">aktuell</em>' : ""}${v.code === code ? '<em class="you">gesucht</em>' : ""}</li>`).join("")}</ol>` +
+      (list[list.length - 1].code !== cur ? `<div class="muted small-note">Seit dem letzten PDF wurde die Doku geändert – für den aktuellen Stand ein neues PDF erstellen.</div>` : "");
+  };
+  if (current.length) return { cls: "ok", html: `✓ Prüfcode <strong>${code}</strong> entspricht dem <strong>aktuellen Stand</strong>:<br>${current.map((x) => link(x) + versions(x)).join("")}` };
+  if (older.length) return { cls: "warn", html: `⚠ Prüfcode <strong>${code}</strong> gehört zu einem <strong>älteren Stand</strong> – die Dokumentation wurde danach geändert:<br>${older.map((x) => link(x) + versions(x)).join("")}` };
+  return { cls: "bad", html: `✗ Zu Prüfcode <strong>${code}</strong> wurde keine Dokumentation gefunden.` +
+    (notLoaded ? ` Hinweis: ${notLoaded} Bauvorhaben sind auf diesem Gerät nicht geladen – dort einmal öffnen und erneut prüfen.` : "") };
+}
+
+// Karte mit dem Prüfergebnis (nur wenn die Suche ein Prüfcode ist)
+function renderCodeCheck(app) {
+  const code = searchCode();
+  if (!code) return false;
+  const r = checkCode(code);
+  const card = el(`<div class="card code-card"><h3 class="section-title">PDF-Prüfcode</h3><div id="chkResult" class="check-result ${r.cls}">${r.html}</div></div>`);
+  $$("[data-open-pid]", card).forEach((b) => {
+    b.onclick = () => {
+      filterText = ""; $("#search").value = ""; $("#appbar").classList.remove("searching");
+      go({ view: "projects", selectedProjectId: b.dataset.openPid, selectedDocId: b.dataset.openDid });
+    };
+  });
+  app.appendChild(card);
+  return true;
 }
 
 function matches(p) {
@@ -525,6 +581,8 @@ function renderProjectList(app, onlyFav) {
   const t = $("#toggleAdd");
   if (t) t.onclick = () => { addOpen = !addOpen; render(); };
 
+  const isCode = renderCodeCheck(app);
+  if (isCode && !shown.length) return;
   const list = el(`<div class="card list-card"></div>`);
   if (filterText.trim()) {
     list.appendChild(el(`<div class="muted list-info">${shown.length} Treffer für „${h(filterText.trim())}“</div>`));
@@ -870,6 +928,7 @@ function renderArchive(app) {
     <div class="page-head">
       <h1>Archiv</h1>
     </div>`));
+  if (renderCodeCheck(app) && !S.state.archivedProjects.some(matches)) return;
   const list = el(`<div class="card list-card"></div>`);
   const all = S.state.archivedProjects.slice().sort((a, b) => a.number.localeCompare(b.number));
   const arch = all.filter(matches);
@@ -1741,16 +1800,6 @@ function renderSettings(app) {
   app.appendChild(el(`<div class="card"><h3 class="section-title">App</h3>${installHtml()}</div>`));
   app.appendChild(el(`
     <div class="card">
-      <h3 class="section-title">Prüfcode prüfen</h3>
-      <p class="muted">Den Code von einem BauDoc-PDF eingeben (steht links am Seitenrand).</p>
-      <div class="check-row">
-        <input id="chkCode" type="text" placeholder="z. B. 7F3A-91C2" autocomplete="off" autocapitalize="characters" enterkeyhint="done" />
-        <button class="primary" id="chkBtn" type="button">Prüfen</button>
-      </div>
-      <div id="chkResult" class="check-result"></div>
-    </div>`));
-  app.appendChild(el(`
-    <div class="card">
       <h3 class="section-title">Datensicherung</h3>
       <p class="muted">Speichert alle Bauvorhaben und alle Fotos, die auf diesem Gerät liegen, in eine Datei.</p>
       <div class="row wrap">
@@ -1793,39 +1842,6 @@ function renderSettings(app) {
     render();
   };
 
-  const runCheck = () => {
-    const out = $("#chkResult");
-    const code = normalizeCode($("#chkCode").value);
-    if (!code) { out.className = "check-result warn"; out.textContent = "Bitte den 8-stelligen Code eingeben, z. B. 7F3A-91C2."; return; }
-    const current = [];
-    const older = [];
-    let notLoaded = 0;
-    for (const p of allProjects()) {
-      if (!p.docs) { notLoaded++; continue; }
-      for (const d of p.docs) {
-        if (contentCode(p, d) === code) current.push({ p, d });
-        else {
-          const hit = (d.pdfCodes || []).filter((x) => x.code === code).pop();
-          if (hit) older.push({ p, d, at: hit.at });
-        }
-      }
-    }
-    const label = (x) => `BV ${h(x.p.number)} ${h(x.p.client || x.p.title)} – „${h(x.d.title)}“ vom ${formatDateDE(x.d.date)}`;
-    if (current.length) {
-      out.className = "check-result ok";
-      out.innerHTML = `✓ <strong>${code}</strong> entspricht dem <strong>aktuellen Stand</strong>:<br>${current.map(label).join("<br>")}`;
-    } else if (older.length) {
-      out.className = "check-result warn";
-      out.innerHTML = `⚠ <strong>${code}</strong> gehört zu einem <strong>älteren Stand</strong> (PDF erstellt am ${older.map((x) => formatDateTimeDE(x.at)).join(", ")}).<br>` +
-        `Die Dokumentation wurde danach geändert:<br>${older.map(label).join("<br>")}`;
-    } else {
-      out.className = "check-result bad";
-      out.innerHTML = `✗ Zu <strong>${code}</strong> wurde keine Dokumentation gefunden.` +
-        (notLoaded ? ` Hinweis: ${notLoaded} Bauvorhaben sind auf diesem Gerät nicht geladen – dort einmal öffnen und erneut prüfen.` : "");
-    }
-  };
-  $("#chkBtn").onclick = runCheck;
-  $("#chkCode").addEventListener("keydown", (e) => { if (e.key === "Enter") runCheck(); });
 
   $("#bkExport").onclick = async () => {
     try {
