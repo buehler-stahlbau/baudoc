@@ -29,4 +29,4 @@ export const SPARTEN = [
   { id: "mon", name: "BauMon", desc: "Montage", icon: "sparte-baumon.svg" },
 ];
 
-export const APP_VERSION = "3.5.1-beta";
+export const APP_VERSION = "3.5.2-beta";

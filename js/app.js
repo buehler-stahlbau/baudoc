@@ -377,7 +377,7 @@ function renderMon(app) {
     <div class="page-head"><h1>BauMon</h1></div>`));
   app.appendChild(el(`
     <div class="card mon-empty">
-      <div class="mon-ico">${SPARTE_ICONS.mon}</div>
+      <img class="mon-logo" src="sparte-baumon.svg" alt="">
       <h2>Montage</h2>
       <p class="muted">Dieser Bereich ist in Vorbereitung.</p>
     </div>`));
