@@ -13,7 +13,9 @@ export const CONFIG = {
   clientId: "9710374b-0d37-4cc6-8e93-a05c17d16b57",   // BauDoc (App-Registrierung Bühler)
   tenantId: "0f5809d8-bfb7-440e-b308-f43d58bfb884",   // Verzeichnis Friedrich Bühler GmbH & Co. KG
   driveBase: "/me/drive",
-  rootFolder: "BauDoc",
+  appFolder: "BauHub",      // Hauptordner der App (Arbeitstitel) – darin je Sparte ein Ordner
+  legacyAppFolders: [],     // frühere Namen des Hauptordners (werden automatisch umgezogen)
+  rootFolder: "BauDoc",     // Ordner der Sparte BauDoc: <appFolder>/BauDoc/<BV>/<Doku>
   archiveFolder: "_Archiv",
   dataFolder: "_daten",     // nur für die App: Inhalte je BV + Favoriten je Nutzer
   usersFolder: "nutzer",    // Unterordner in _daten: je Nutzer eine Datei mit seinen Favoriten
@@ -27,4 +29,4 @@ export const SPARTEN = [
   { id: "mon", name: "BauMon", desc: "Montage", icon: "sparte-baumon.svg" },
 ];
 
-export const APP_VERSION = "3.4.2-beta";
+export const APP_VERSION = "3.5.0-beta";

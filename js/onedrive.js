@@ -150,8 +150,25 @@ export async function ensureFolder(parentId, name) {
   return (await getChild(parentId, name)) || createFolder(parentId, name, "fail");
 }
 
+// Ordner der Sparte BauDoc: <Hauptordner>/BauDoc
+// Ältere Ablage (BauDoc direkt in OneDrive oder unter einem früheren Hauptordner)
+// wird als Ganzes verschoben – alle Verknüpfungen (IDs) bleiben dabei gültig.
 export async function getRootFolder() {
-  return (await getByPath(CONFIG.rootFolder)) || createFolder(null, CONFIG.rootFolder, "fail");
+  const app = CONFIG.appFolder;
+  const path = `${app}/${CONFIG.rootFolder}`;
+  const cur = await getByPath(path);
+  if (cur) return cur;
+  const appDir = (await getByPath(app)) || (await createFolder(null, app, "fail"));
+  const olds = [CONFIG.rootFolder, ...(CONFIG.legacyAppFolders || []).map((a) => `${a}/${CONFIG.rootFolder}`)];
+  for (const old of olds) {
+    const o = await getByPath(old);
+    if (o && o.folder && o.id !== appDir.id) {
+      await moveItem(o.id, appDir.id);
+      const moved = await getByPath(path);
+      if (moved) return moved;
+    }
+  }
+  return createFolder(appDir.id, CONFIG.rootFolder, "fail");
 }
 
 export async function listChildren(itemId) {
