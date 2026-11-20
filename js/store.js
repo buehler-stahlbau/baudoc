@@ -270,6 +270,7 @@ export function newProtocol(p) {
 
 export function normalizeProject(p) {
   p.geo = cleanGeo(p.geo);
+  if (p.summary && !(Number.isInteger(p.summary.docs) && p.summary.docs >= 0)) p.summary = null;
   p.number = String(p.number ?? p.id ?? "");
   p.title = String(p.title ?? "");
   if (typeof p.client !== "string" || typeof p.place !== "string") {

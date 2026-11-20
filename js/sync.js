@@ -32,7 +32,14 @@ import { sanitizeName, projectLabel, sleep, isoDay } from "./util.js";
 import { makeThumb } from "./images.js";
 import { cleanGeo, geoValid } from "./geo.js";
 
-const MAP_INDEX = "karte.json"; // _daten/karte.json: Kartenposition je BV (auch für nicht geladene BV)
+const MAP_INDEX = "karte.json"; // _daten/karte.json: Übersicht je BV (Kartenposition, Anzahl Dokus, letzte Doku)
+
+// Kurzübersicht eines geladenen BV
+export function projectSummary(p) {
+  if (!Array.isArray(p.docs)) return null;
+  const last = p.docs.reduce((mx, d) => Math.max(mx, Date.parse(d.date) || 0), 0);
+  return { docs: p.docs.length, last: last ? new Date(last).toISOString() : null };
+}
 
 const LEGACY_PROJECT_FILE = "baudoc.json"; // bis Version 2.8 im BV-Ordner
 
@@ -168,8 +175,6 @@ async function syncAll(full) {
 
   if (full) await refreshListing(root);
   if (full || S.state.prefs.dirty) await syncPrefs(root, dataDir);
-  if (full || S.state.mapDirty) await syncMapIndex(dataDir);
-
   const outbox = await db.outboxAll();
   const sel = st.selectedProjectId;
   const targets = allProjects().filter((p) =>
@@ -189,6 +194,7 @@ async function syncAll(full) {
       if (!firstError) firstError = e;
     }
   }
+  if (full || S.state.mapDirty) await syncMapIndex(dataDir);
   outboxCount = (await db.outboxAll()).length;
   if (firstError) throw firstError;
 }
@@ -202,16 +208,20 @@ async function syncMapIndex(dataDir) {
   for (const p of allProjects()) {
     const fid = p.remote && p.remote.folderId;
     if (!fid) continue;
-    const e = idx[fid] ? cleanGeo(idx[fid]) : null;
+    const raw = idx[fid] && typeof idx[fid] === "object" ? idx[fid] : {};
+    const e = cleanGeo(raw);
+    const next = { ...raw };
+    // Kartenposition
     if (geoValid(p)) {
-      // eigener Stand -> in die Übersicht
-      if (!e || e.lat !== p.geo.lat || e.lon !== p.geo.lon || e.place !== p.geo.place) {
-        idx[fid] = { lat: p.geo.lat, lon: p.geo.lon, place: p.geo.place, label: p.geo.label || "" };
-        changed = true;
-      }
+      next.lat = p.geo.lat; next.lon = p.geo.lon; next.place = p.geo.place; next.label = p.geo.label || "";
     } else if (e && e.place === p.place) {
       p.geo = e; // Position aus der Übersicht übernehmen
     }
+    // Anzahl Dokus + letzte Doku
+    const sum = projectSummary(p);
+    if (sum) { next.docs = sum.docs; next.last = sum.last; }
+    else if (Number.isInteger(raw.docs)) p.summary = { docs: raw.docs, last: typeof raw.last === "string" ? raw.last : null };
+    if (JSON.stringify(next) !== JSON.stringify(raw)) { idx[fid] = next; changed = true; }
   }
   if (changed) await od.putJson(dataDir.id, MAP_INDEX, { format: "baudoc-map", version: 1, bv: idx }, null);
   S.state.mapDirty = false;
@@ -410,6 +420,8 @@ async function syncProject(p, root, dataDir, outbox) {
       p.remote.etag = remote.eTag;
     }
     if (p.rev === rev) p.dirty = false;
+    const sum = projectSummary(p);
+    if (sum && JSON.stringify(sum) !== JSON.stringify(p.summary || null)) { p.summary = sum; S.state.mapDirty = true; }
 
     // 9) Speicher auf dem Gerät
     await applyCachePolicy(p);

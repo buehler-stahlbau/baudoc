@@ -454,14 +454,23 @@ function renderProjectList(app, onlyFav) {
   app.appendChild(list);
 }
 
-function projectRow(p) {
-  let meta;
-  if (p.docs === null) meta = `<span class="badge">☁ in OneDrive</span>`;
-  else {
-    const n = p.docs.length;
-    const last = p.docs.reduce((mx, d) => Math.max(mx, Date.parse(d.date) || 0), 0);
-    meta = `<span class="muted">${n} Dokumentation${n === 1 ? "" : "en"}${last ? " · zuletzt " + formatDateDE(last) : ""}</span>`;
+// "3 Dokumentationen · zuletzt 19.11.2026" – auch für BV, deren Inhalt noch nicht geladen ist
+function docsMeta(p) {
+  let n = null, last = 0;
+  if (Array.isArray(p.docs)) {
+    n = p.docs.length;
+    last = p.docs.reduce((mx, d) => Math.max(mx, Date.parse(d.date) || 0), 0);
+  } else if (p.summary) {
+    n = p.summary.docs;
+    last = Date.parse(p.summary.last) || 0;
   }
+  const cloud = p.docs === null ? `<span class="cloud-wrap" title="Inhalt liegt in OneDrive und wird beim Öffnen geladen"><svg class="ico cloud-hint" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 18a4.5 4.5 0 0 1-.6-9 6 6 0 0 1 11.4 1.6A4 4 0 0 1 17 18H7z"/></svg></span>` : "";
+  if (n === null) return `<span class="meta-line">${cloud}<span class="muted">Wird beim Öffnen geladen</span></span>`;
+  return `<span class="meta-line">${cloud}<span class="muted">${n} ${n === 1 ? "Doku" : "Dokus"}${last ? " · zuletzt " + formatDateDE(last) : ""}</span></span>`;
+}
+
+function projectRow(p) {
+  const meta = docsMeta(p);
   const pend = p.dirty && od.isConfigured() ? ` <span class="muted" title="Noch nicht hochgeladen">⏳</span>` : "";
   const row = el(`
     <div class="project-item ${justAdded === p.id ? "flash" : ""}" data-pid="${h(p.id)}">
@@ -695,7 +704,7 @@ function renderArchive(app) {
   } else if (!arch.length) list.appendChild(el(`<p class="muted">Keine Treffer.</p>`));
 
   arch.forEach((p) => {
-    const count = p.docs === null ? "☁ in OneDrive" : `${p.docs.length} Dokumentation(en)`;
+    const count = docsMeta(p);
     const row = el(`
       <div class="archive-item">
         <div class="p-info">
