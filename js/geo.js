@@ -72,15 +72,24 @@ export function loadLeaflet() {
   if (window.L && window.L.map) return Promise.resolve(window.L);
   if (!leafletPromise) {
     leafletPromise = new Promise((resolve, reject) => {
-      const css = document.createElement("link");
-      css.rel = "stylesheet";
-      css.href = "vendor/leaflet/leaflet.css";
-      document.head.appendChild(css);
-      const s = document.createElement("script");
-      s.src = "vendor/leaflet/leaflet.js";
-      s.onload = () => resolve(window.L);
-      s.onerror = () => { leafletPromise = null; reject(new Error("Karte konnte nicht geladen werden")); };
-      document.head.appendChild(s);
+      for (const href of ["vendor/leaflet/leaflet.css", "vendor/leaflet/MarkerCluster.css"]) {
+        const css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = href;
+        document.head.appendChild(css);
+      }
+      const load = (src) => new Promise((res, rej) => {
+        const s = document.createElement("script");
+        s.src = src;
+        s.onload = res;
+        s.onerror = () => rej(new Error("Karte konnte nicht geladen werden"));
+        document.head.appendChild(s);
+      });
+      // Leaflet + Erweiterung zum Gruppieren naher Pins
+      load("vendor/leaflet/leaflet.js")
+        .then(() => load("vendor/leaflet/leaflet.markercluster.js"))
+        .then(() => resolve(window.L))
+        .catch((e) => { leafletPromise = null; reject(e); });
     });
   }
   return leafletPromise;

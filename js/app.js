@@ -611,16 +611,22 @@ const PIN_STYLE = {
 
 // Pin mit Anzahl im Kopf; optional goldenes Abzeichen oben rechts (Anzahl Favoriten)
 // schlanke Form (24 x 34 px), damit viele Pins wenig von der Karte verdecken
-function pinIcon(L, kind, count, favBadge = 0) {
+function pinIcon(L, kind, count, favBadge = 0, cluster = false) {
   const st = PIN_STYLE[kind];
+  // Sammel-Pin (mehrere Orte): zweiter, leicht versetzter Umriss dahinter ("Stapel")
+  const stack = cluster ? `<path transform="translate(2.6 -1.6)" d="M12 33s9.5-10.2 9.5-20.3A9.5 9.5 0 0 0 2.5 12.7C2.5 22.8 12 33 12 33z" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.6" opacity=".55"/>` : "";
   const n = count > 99 ? "99+" : String(count);
   const size = n.length >= 3 ? 6.6 : n.length === 2 ? 8.6 : 9.8;
-  const body = `
+  const body = `${stack}
       <path d="M12 33s9.5-10.2 9.5-20.3A9.5 9.5 0 0 0 2.5 12.7C2.5 22.8 12 33 12 33z" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.6"/>
       <circle cx="12" cy="12.4" r="6.9" fill="${st.inner}"/>
       ${count > 1 ? `<text x="12" y="12.6" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${size}" fill="${st.text}">${n}</text>` : ""}`;
-  const data = `data-kind="${kind}" data-count="${count > 1 ? n : ""}" data-fav="${favBadge || ""}"`;
+  const data = `data-kind="${kind}" data-count="${count > 1 ? n : ""}" data-fav="${favBadge || ""}" data-cluster="${cluster ? 1 : ""}"`;
   if (!favBadge) {
+    if (cluster) {
+      return L.divIcon({ className: "", html: `<div class="pin" ${data}><svg viewBox="0 -2 28 36" width="28" height="36" aria-hidden="true">${body}</svg></div>`,
+        iconSize: [28, 36], iconAnchor: [12, 35], popupAnchor: [0, -30] });
+    }
     return L.divIcon({ className: "", html: `<div class="pin" ${data}><svg viewBox="0 0 24 34" width="24" height="34" aria-hidden="true">${body}</svg></div>`,
       iconSize: [24, 34], iconAnchor: [12, 33], popupAnchor: [0, -30] });
   }
@@ -709,6 +715,20 @@ function renderMap(app) {
       groups.get(k)[kindOf(p)].push(p);
     }
     const byNum = (a, b) => a.number.localeCompare(b.number);
+    // nahe beieinander liegende Orte automatisch zu einem Sammel-Pin zusammenfassen
+    const clusters = L.markerClusterGroup({
+      maxClusterRadius: 42,
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      disableClusteringAtZoom: 14,
+      iconCreateFunction: (c) => {
+        let fav = 0, other = 0, archive = 0;
+        for (const mk of c.getAllChildMarkers()) { fav += mk.options.counts.fav; other += mk.options.counts.other; archive += mk.options.counts.archive; }
+        const total = fav + other + archive;
+        const kind = other ? "other" : fav ? "fav" : "archive";
+        return pinIcon(L, kind, kind === "fav" ? total : total - fav, kind !== "fav" && fav ? fav : 0, true);
+      },
+    });
     for (const g of groups.values()) {
       const total = g.fav.length + g.other.length + g.archive.length;
       // ein Pin je Ort, gleicher Umriss: Farbe nach der "wichtigsten" Art,
@@ -716,13 +736,15 @@ function renderMap(app) {
       const kind = g.other.length ? "other" : g.fav.length ? "fav" : "archive";
       const badge = kind !== "fav" && g.fav.length ? g.fav.length : 0;
       const icon = pinIcon(L, kind, kind === "other" || kind === "archive" ? total - g.fav.length : total, badge);
-      const m = L.marker([g.lat, g.lon], { icon, title: `${g.place}: ${total} BV` }).addTo(map);
+      const m = L.marker([g.lat, g.lon], { icon, title: `${g.place}: ${total} BV`, counts: { fav: g.fav.length, other: g.other.length, archive: g.archive.length } });
+      clusters.addLayer(m);
       const sorted = [...g.fav.sort(byNum), ...g.other.sort(byNum), ...g.archive.sort(byNum)];
       m.bindPopup(`<div class="map-pop"><h4>${h(g.place)} · ${total} BV</h4>${sorted.map((p) => {
         const arch = st.archivedProjects.includes(p);
         return `<button type="button" data-pid="${h(p.id)}" data-arch="${arch ? 1 : ""}">${p.fav && !arch ? '<span class="star">★</span>' : ""}<span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}${arch ? ' <span class="arch-tag">Archiv</span>' : ""}</button>`;
       }).join("")}</div>`);
     }
+    map.addLayer(clusters);
     map.on("popupopen", (e) => {
       $$("[data-pid]", e.popup.getElement()).forEach((b) => {
         b.onclick = () => {
