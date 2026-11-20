@@ -425,8 +425,9 @@ function renderProjectList(app, onlyFav) {
     const numEl = $("#newNum");
     numEl.addEventListener("input", () => {
       numEl.value = numEl.value.replace(/\D/g, "").slice(0, 5);
-      if (numEl.value.length === 5) $("#newClient").focus();
     });
+    // Kein automatisches Weiterspringen (Tab-Gewohnheit); Enter = nächstes Feld
+    numEl.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#newClient").focus(); } });
     $("#addP").onclick = () => addProject();
     newGeo = null;
     attachPlaceSuggest($("#newPlace"), $("#newPlaceList"), (g) => { newGeo = g; });
