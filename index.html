@@ -125,10 +125,8 @@
     @media (min-width: 1051px){
       .tabs .tab { flex: 0 0 auto; justify-content: flex-start; }
       .tab .cnt { margin-left: auto; }
-      #tabProjects { width: 202px; }
-      #tabFav { width: 172px; }
-      #tabArchive { width: 150px; }
-      #tabMap { width: 112px; }
+      /* alle vier Reiter gleich breit */
+      #tabProjects, #tabFav, #tabMap, #tabArchive { width: 184px; }
     }
     /* Mittlere Breite: nur Symbole, Zahl als Abzeichen (wie am Handy) */
     @media (max-width: 1050px){
@@ -179,7 +177,7 @@
     body.sparte-mon #tabMon { display: inline-flex; }
     body.sparte-mon #tabProjects, body.sparte-mon #tabFav, body.sparte-mon #tabMap, body.sparte-mon #tabArchive,
     body.sparte-mon .search-wrap, body.sparte-mon #searchBtn { display: none !important; }
-    @media (min-width: 1051px){ #tabMon { width: 150px; } }
+    @media (min-width: 1051px){ #tabMon { width: 184px; } }
     body.locked .menu-btn { display: none; }
     .drawer { position: fixed; inset: 0; z-index: 200; }
     .drawer[hidden] { display: none; }
