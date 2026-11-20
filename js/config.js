@@ -24,7 +24,7 @@ export const CONFIG = {
 // Sparten der App (später je Nutzer freischaltbar)
 export const SPARTEN = [
   { id: "doc", name: "BauDoc", desc: "Doku, Abnahme", icon: "sparte-baudoc.svg" },
-  { id: "mon", name: "BauMon", desc: "Montage" },
+  { id: "mon", name: "BauMon", desc: "Montage", icon: "sparte-baumon.svg" },
 ];
 
-export const APP_VERSION = "3.4.1-beta";
+export const APP_VERSION = "3.4.2-beta";

@@ -292,6 +292,12 @@ function updateHeader() {
     tabMon: "mon",
   };
   document.body.classList.toggle("sparte-mon", st.sparte === "mon");
+  // oben rechts: Logo der aktuellen Sparte (Bühler-Logo nur im Burgermenü)
+  const sp = SPARTEN.find((x) => x.id === st.sparte) || SPARTEN[0];
+  const li = $("#sparteLogoImg");
+  if (li.getAttribute("src") !== sp.icon) li.setAttribute("src", sp.icon);
+  li.alt = sp.name;
+  $("#sparteLogo").title = sp.name + " – Menü öffnen";
   for (const [id, view] of Object.entries(tabs)) {
     const b = $("#" + id);
     b.classList.toggle("active", st.view === view);
@@ -355,6 +361,7 @@ function closeDrawer() {
 
 function setupDrawer() {
   $("#menuBtn").onclick = () => ($("#drawer").hidden ? openDrawer() : closeDrawer());
+  $("#sparteLogo").onclick = () => ($("#drawer").hidden ? openDrawer() : closeDrawer());
   $$("#drawer [data-close]").forEach((b) => (b.onclick = closeDrawer));
   $("#drawerSettings").onclick = () => {
     closeDrawer();
