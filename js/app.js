@@ -611,18 +611,26 @@ const PIN_STYLE = {
 
 // Pin mit Anzahl im Kopf; optional goldenes Abzeichen oben rechts (Anzahl Favoriten)
 // schlanke Form (24 x 34 px), damit viele Pins wenig von der Karte verdecken
-function pinIcon(L, kind, count, favBadge = 0, cluster = false) {
+// Grundfarbe: grau, wenn aktive BV (ohne Favoriten) da sind; sonst gold (nur Favoriten) bzw. weiß (nur Archiv).
+// Weitere Arten am selben Ort als Abzeichen: gold = Favoriten, weiß = Archiv.
+function pinIcon(L, counts, cluster = false) {
+  const kind = counts.other ? "other" : counts.fav ? "fav" : "archive";
   const st = PIN_STYLE[kind];
+  const count = counts[kind];
+  const num = (v) => (v > 99 ? "99+" : String(v));
   // Sammel-Pin (mehrere Orte): zweiter, leicht versetzter Umriss dahinter ("Stapel")
   const stack = cluster ? `<path transform="translate(2.6 -1.6)" d="M12 33s9.5-10.2 9.5-20.3A9.5 9.5 0 0 0 2.5 12.7C2.5 22.8 12 33 12 33z" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.6" opacity=".55"/>` : "";
-  const n = count > 99 ? "99+" : String(count);
+  const n = num(count);
   const size = n.length >= 3 ? 6.6 : n.length === 2 ? 8.6 : 9.8;
   const body = `${stack}
       <path d="M12 33s9.5-10.2 9.5-20.3A9.5 9.5 0 0 0 2.5 12.7C2.5 22.8 12 33 12 33z" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.6"/>
       <circle cx="12" cy="12.4" r="6.9" fill="${st.inner}"/>
-      ${count > 1 ? `<text x="12" y="12.6" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${size}" fill="${st.text}">${n}</text>` : ""}`;
-  const data = `data-kind="${kind}" data-count="${count > 1 ? n : ""}" data-fav="${favBadge || ""}" data-cluster="${cluster ? 1 : ""}"`;
-  if (!favBadge) {
+      <text x="12" y="12.6" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${size}" fill="${st.text}">${n}</text>`;
+  const badges = [];
+  if (kind !== "fav" && counts.fav) badges.push({ v: counts.fav, fill: "#d6a21c", stroke: "#fff", text: "#fff", k: "fav" });
+  if (kind !== "archive" && counts.archive) badges.push({ v: counts.archive, fill: "#fff", stroke: "#8d8c87", text: "#5f5e59", k: "arch" });
+  const data = `data-kind="${kind}" data-count="${n}" data-fav="${badges.find((b) => b.k === "fav")?.v || ""}" data-arch="${badges.find((b) => b.k === "arch")?.v || ""}" data-cluster="${cluster ? 1 : ""}"`;
+  if (!badges.length) {
     if (cluster) {
       return L.divIcon({ className: "", html: `<div class="pin" ${data}><svg viewBox="0 -2 28 36" width="28" height="36" aria-hidden="true">${body}</svg></div>`,
         iconSize: [28, 36], iconAnchor: [12, 35], popupAnchor: [0, -30] });
@@ -630,14 +638,20 @@ function pinIcon(L, kind, count, favBadge = 0, cluster = false) {
     return L.divIcon({ className: "", html: `<div class="pin" ${data}><svg viewBox="0 0 24 34" width="24" height="34" aria-hidden="true">${body}</svg></div>`,
       iconSize: [24, 34], iconAnchor: [12, 33], popupAnchor: [0, -30] });
   }
-  const t1 = favBadge > 99 ? "99+" : String(favBadge);
-  const s1 = t1.length >= 3 ? 5.6 : t1.length === 2 ? 7.2 : 8.2;
-  const br = t1.length >= 2 ? 7.5 : 6.8;
-  return L.divIcon({ className: "", html: `<div class="pin mixed" ${data}><svg viewBox="0 0 34 36" width="34" height="36" aria-hidden="true">
-      <g transform="translate(0 2)">${body}</g>
-      <circle cx="${34 - br - 1.2}" cy="${br + 1.2}" r="${br}" fill="#d6a21c" stroke="#fff" stroke-width="1.6"/>
-      <text x="${34 - br - 1.2}" y="${br + 1.4}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${s1}" fill="#fff">${t1}</text>
-    </svg></div>`, iconSize: [34, 36], iconAnchor: [12, 35], popupAnchor: [0, -31] });
+  // Abzeichen rechts am Pin: erstes oben, zweites darunter
+  const H = badges.length > 1 ? 44 : 36;
+  const marks = badges.map((b, i) => {
+    const t = num(b.v);
+    const fs = t.length >= 3 ? 5.6 : t.length === 2 ? 7.2 : 8.2;
+    const r = t.length >= 2 ? 7.5 : 6.8;
+    const cx = 34 - r - 1.2, cy = 8.7 + i * 16;
+    return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${b.fill}" stroke="${b.stroke}" stroke-width="1.6"/>
+      <text x="${cx}" y="${cy + 0.2}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${fs}" fill="${b.text}">${t}</text>`;
+  }).join("");
+  const dy = H - 34;
+  return L.divIcon({ className: "", html: `<div class="pin mixed" ${data}><svg viewBox="0 0 34 ${H}" width="34" height="${H}" aria-hidden="true">
+      <g transform="translate(0 ${dy})">${body}</g>${marks}
+    </svg></div>`, iconSize: [34, H], iconAnchor: [12, H - 1], popupAnchor: [0, -(H - 5)] });
 }
 
 // Startausschnitt: Altensteig in der Mitte, ca. 150 km Umkreis
@@ -671,7 +685,7 @@ function renderMap(app) {
   app.appendChild(el(`
     <div class="page-head map-head"><h1>Karte</h1>
       <div class="map-filter" role="group" aria-label="Anzeigen">
-        ${chip("fav", "Favoriten", "c-fav")}${chip("other", "Weitere BV", "c-other")}${chip("archive", "Archiv", "c-arch")}
+        ${chip("other", "Bauvorhaben", "c-other")}${chip("fav", "Favoriten", "c-fav")}${chip("archive", "Archiv", "c-arch")}
       </div>
     </div>`));
   $$(".map-chip").forEach((b) => {
@@ -722,20 +736,16 @@ function renderMap(app) {
       spiderfyOnMaxZoom: true,
       disableClusteringAtZoom: 14,
       iconCreateFunction: (c) => {
-        let fav = 0, other = 0, archive = 0;
-        for (const mk of c.getAllChildMarkers()) { fav += mk.options.counts.fav; other += mk.options.counts.other; archive += mk.options.counts.archive; }
-        const total = fav + other + archive;
-        const kind = other ? "other" : fav ? "fav" : "archive";
-        return pinIcon(L, kind, kind === "fav" ? total : total - fav, kind !== "fav" && fav ? fav : 0, true);
+        const sum = { fav: 0, other: 0, archive: 0 };
+        for (const mk of c.getAllChildMarkers()) for (const k in sum) sum[k] += mk.options.counts[k];
+        return pinIcon(L, sum, true);
       },
     });
     for (const g of groups.values()) {
       const total = g.fav.length + g.other.length + g.archive.length;
       // ein Pin je Ort, gleicher Umriss: Farbe nach der "wichtigsten" Art,
       // Favoriten als goldenes Abzeichen, wenn noch andere Arten am selben Ort sind
-      const kind = g.other.length ? "other" : g.fav.length ? "fav" : "archive";
-      const badge = kind !== "fav" && g.fav.length ? g.fav.length : 0;
-      const icon = pinIcon(L, kind, kind === "other" || kind === "archive" ? total - g.fav.length : total, badge);
+      const icon = pinIcon(L, { fav: g.fav.length, other: g.other.length, archive: g.archive.length });
       const m = L.marker([g.lat, g.lon], { icon, title: `${g.place}: ${total} BV`, counts: { fav: g.fav.length, other: g.other.length, archive: g.archive.length } });
       clusters.addLayer(m);
       const sorted = [...g.fav.sort(byNum), ...g.other.sort(byNum), ...g.archive.sort(byNum)];
