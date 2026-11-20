@@ -325,7 +325,7 @@ function openDrawer() {
   $("#drawerSparten").innerHTML = SPARTEN.map((sp) => {
     const on = st.sparte === sp.id && st.view !== "settings";
     return `<button type="button" class="drawer-item ${on ? "active" : ""}" data-sparte="${sp.id}" aria-current="${on ? "true" : "false"}">
-      <span class="d-ico">${SPARTE_ICONS[sp.id] || ""}</span>
+      <span class="d-ico${sp.icon ? " img" : ""}">${sp.icon ? `<img src="${h(sp.icon)}" alt="">` : SPARTE_ICONS[sp.id] || ""}</span>
       <span class="d-text"><b>${h(sp.name)}</b><small>${h(sp.desc)}</small></span>
       ${st.sparte === sp.id ? '<svg class="ico d-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>' : ""}
     </button>`;
