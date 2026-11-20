@@ -253,6 +253,9 @@ function renderLogin(app) {
 
 function render() {
   pendingRender = false;
+  const prevView = currentRenderedView;
+  currentRenderedView = S.state.view;
+  lastRenderedView = prevView;
   const locked = isLocked();
   document.body.classList.toggle("locked", locked);
   const app = $("#app");
@@ -610,11 +613,47 @@ function pinHtml(color, count) {
     </svg></div>`;
 }
 
+// Gemeinsamer Pin: Kopf links gold (★ Favoriten), rechts grau (weitere), eine Spitze
+function splitPinHtml(nFav, nOther) {
+  const t1 = nFav > 99 ? "99+" : String(nFav);
+  const t2 = nOther > 99 ? "99+" : String(nOther);
+  const cw = 7.4;                                   // Breite je Ziffer
+  const w1 = Math.round(9 + 10 + 3 + t1.length * cw + 9); // Rand + Stern + Abstand + Zahl + Rand
+  const w2 = Math.max(24, Math.round(9 + t2.length * cw + 9));
+  const w = w1 + w2, hgt = 24, r = 12, tip = w / 2;
+  return {
+    w: w + 4,
+    html: `<div class="pin split" data-fav="${nFav}" data-other="${nOther}"><svg viewBox="-2 -2 ${w + 4} 42" width="${w + 4}" height="42" aria-hidden="true">
+      <path d="M${tip - 7} ${hgt - 1}L${tip} 38L${tip + 7} ${hgt - 1}Z" fill="#5f5e59" stroke="#fff" stroke-width="2" stroke-linejoin="round"/>
+      <rect x="0" y="0" width="${w}" height="${hgt}" rx="${r}" fill="#fff"/>
+      <path d="M${r} 1.5H${w1}V${hgt - 1.5}H${r}A${r - 1.5} ${r - 1.5} 0 0 1 ${r} 1.5Z" fill="#d6a21c"/>
+      <path d="M${w1} 1.5H${w - r}A${r - 1.5} ${r - 1.5} 0 0 1 ${w - r} ${hgt - 1.5}H${w1}Z" fill="#8d8c87"/>
+      <path d="M${tip - 6} ${hgt - 1.6}L${tip} ${hgt + 5}L${tip + 6} ${hgt - 1.6}Z" fill="#5f5e59"/>
+      <text x="9" y="${hgt / 2 + 0.5}" text-anchor="start" dominant-baseline="central" font-family="system-ui, sans-serif" font-size="10" fill="#fff">★</text>
+      <text x="${9 + 10 + 3 + (t1.length * cw) / 2}" y="${hgt / 2 + 0.5}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="12" fill="#fff">${t1}</text>
+      <text x="${w1 + w2 / 2}" y="${hgt / 2 + 0.5}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="12" fill="#fff">${t2}</text>
+    </svg></div>`,
+  };
+}
+
+// Startausschnitt: Altensteig in der Mitte, ca. 150 km Umkreis
+const MAP_HOME = { lat: 48.5866, lon: 8.6046, radiusKm: 150 };
+function homeBounds() {
+  const dLat = MAP_HOME.radiusKm / 111.32;
+  const dLon = MAP_HOME.radiusKm / (111.32 * Math.cos((MAP_HOME.lat * Math.PI) / 180));
+  return [[MAP_HOME.lat - dLat, MAP_HOME.lon - dLon], [MAP_HOME.lat + dLat, MAP_HOME.lon + dLon]];
+}
+let lastRenderedView = null;
+let currentRenderedView = null;
+
 function renderMap(app) {
+  // Karte neu geöffnet -> Startausschnitt; nur innerhalb der Karte (z. B. nach Abgleich) Ausschnitt behalten
+  const stay = lastRenderedView === "map";
   if (mapInstance) {
-    try { mapView = { c: mapInstance.getCenter(), z: mapInstance.getZoom() }; mapInstance.remove(); } catch {}
+    try { if (stay) mapView = { c: mapInstance.getCenter(), z: mapInstance.getZoom() }; mapInstance.remove(); } catch {}
     mapInstance = null;
   }
+  if (!stay) mapView = null;
   const st = S.state;
   const list = st.projects.filter(matches);
   const onMap = list.filter(geoValid);
@@ -647,8 +686,9 @@ function renderMap(app) {
   loadLeaflet().then((L) => {
     const box = $("#map");
     if (!box || S.state.view !== "map") return;
-    const map = L.map(box, { zoomControl: true, attributionControl: true });
+    const map = L.map(box, { zoomControl: true, attributionControl: true, zoomSnap: 0.25, zoomDelta: 1 });
     mapInstance = map;
+    if (navigator.webdriver) window.__bdMap = map; // nur für automatische Tests
     L.tileLayer(TILE_URL, { maxZoom: 18, attribution: TILE_ATTRIBUTION, referrerPolicy: "strict-origin-when-cross-origin" }).addTo(map);
 
     // je Ort gruppieren; Favoriten (gold) und weitere (grau) als zwei Pins nebeneinander
@@ -659,18 +699,18 @@ function renderMap(app) {
       groups.get(k)[p.fav ? "fav" : "other"].push(p);
     }
     const pts = [];
+    const byNum = (a, b) => a.number.localeCompare(b.number);
     for (const g of groups.values()) {
-      const both = g.fav.length && g.other.length;
-      const add = (items, color, dx) => {
-        if (!items.length) return;
-        const icon = L.divIcon({ className: "", html: pinHtml(color, items.length), iconSize: [32, 42], iconAnchor: [16 - dx, 41], popupAnchor: [dx, -38] });
-        const m = L.marker([g.lat, g.lon], { icon, title: `${g.place}: ${items.length} BV` }).addTo(map);
-        const sorted = items.slice().sort((a, b) => a.number.localeCompare(b.number));
-        m.bindPopup(`<div class="map-pop"><h4>${h(g.place)}</h4>${sorted.map((p) =>
-          `<button type="button" data-pid="${h(p.id)}">${p.fav ? '<span class="star">★</span>' : ""}<span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}</button>`).join("")}</div>`);
-      };
-      add(g.fav, "#d6a21c", both ? -15 : 0);
-      add(g.other, "#8d8c87", both ? 15 : 0);
+      const total = g.fav.length + g.other.length;
+      // ein Pin je Ort; bei Favoriten + weiteren: zweigeteilter Kopf (gold | grau), eine Spitze
+      const mixed = g.fav.length && g.other.length;
+      const icon = mixed
+        ? (() => { const sp = splitPinHtml(g.fav.length, g.other.length); return L.divIcon({ className: "", html: sp.html, iconSize: [sp.w, 40], iconAnchor: [sp.w / 2, 39], popupAnchor: [0, -36] }); })()
+        : L.divIcon({ className: "", html: pinHtml(g.fav.length ? "#d6a21c" : "#8d8c87", total), iconSize: [32, 42], iconAnchor: [16, 41], popupAnchor: [0, -38] });
+      const m = L.marker([g.lat, g.lon], { icon, title: `${g.place}: ${total} BV` }).addTo(map);
+      const sorted = [...g.fav.slice().sort(byNum), ...g.other.slice().sort(byNum)];
+      m.bindPopup(`<div class="map-pop"><h4>${h(g.place)} · ${total} BV</h4>${sorted.map((p) =>
+        `<button type="button" data-pid="${h(p.id)}">${p.fav ? '<span class="star">★</span>' : ""}<span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}</button>`).join("")}</div>`);
       pts.push([g.lat, g.lon]);
     }
     map.on("popupopen", (e) => {
@@ -679,9 +719,7 @@ function renderMap(app) {
       });
     });
     if (mapView) map.setView(mapView.c, mapView.z);
-    else if (pts.length === 1) map.setView(pts[0], 11);
-    else if (pts.length) map.fitBounds(pts, { padding: [40, 40], maxZoom: 11 });
-    else map.setView([48.586, 8.604], 9); // Altensteig
+    else map.setView([MAP_HOME.lat, MAP_HOME.lon], map.getBoundsZoom(homeBounds(), false)); // Altensteig genau in der Mitte
   }).catch((e) => {
     const box = $("#map");
     if (box) box.innerHTML = `<div class="empty"><p class="muted">${h(e.message)}</p></div>`;
