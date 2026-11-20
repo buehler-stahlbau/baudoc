@@ -602,34 +602,36 @@ function attachPlaceSuggest(input, list, onPick) {
 let mapInstance = null;
 let mapView = null; // zuletzt gezeigter Ausschnitt
 
-function pinHtml(color, count) {
-  // Zahl direkt in der Grafik (wird so nie vom Schatten überdeckt)
-  const n = count > 99 ? "99+" : String(count);
-  const size = n.length >= 3 ? 8.5 : n.length === 2 ? 11 : 12.5;
-  return `<div class="pin" data-count="${count > 1 ? n : ""}"><svg viewBox="0 0 32 42" width="32" height="42" aria-hidden="true">
-      <path d="M16 41s13-12.6 13-24A13 13 0 0 0 3 17c0 11.4 13 24 13 24z" fill="${color}" stroke="#fff" stroke-width="2"/>
-      <circle cx="16" cy="15" r="9.5" fill="#fff"/>
-      ${count > 1 ? `<text x="16" y="15" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${size}" fill="#2b2b28">${n}</text>` : ""}
-    </svg></div>`;
-}
+// Farben der Pins: gold = Favoriten, grau = weitere, weiß = Archiv (gleicher Umriss)
+const PIN_STYLE = {
+  fav: { fill: "#d6a21c", stroke: "#fff", inner: "#fff", text: "#2b2b28" },
+  other: { fill: "#8d8c87", stroke: "#fff", inner: "#fff", text: "#2b2b28" },
+  archive: { fill: "#fff", stroke: "#8d8c87", inner: "#ecebe8", text: "#5f5e59" },
+};
 
-// Gemischter Ort: gleicher Pin-Umriss wie alle anderen (grau, Anzahl weitere),
-// dazu ein goldenes Abzeichen oben rechts mit der Anzahl Favoriten
-function mixedPinHtml(nFav, nOther) {
-  const t2 = nOther > 99 ? "99+" : String(nOther);
-  const t1 = nFav > 99 ? "99+" : String(nFav);
-  const s2 = t2.length >= 3 ? 8.5 : t2.length === 2 ? 11 : 12.5;
-  const s1 = t1.length >= 3 ? 7 : t1.length === 2 ? 9 : 10.5;
-  const br = t1.length >= 2 ? 10 : 9; // Radius Abzeichen
-  return `<div class="pin mixed" data-fav="${nFav}" data-other="${nOther}"><svg viewBox="0 0 46 46" width="46" height="46" aria-hidden="true">
-      <g transform="translate(0 4)">
-        <path d="M16 41s13-12.6 13-24A13 13 0 0 0 3 17c0 11.4 13 24 13 24z" fill="#8d8c87" stroke="#fff" stroke-width="2"/>
-        <circle cx="16" cy="15" r="9.5" fill="#fff"/>
-        <text x="16" y="15" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${s2}" fill="#2b2b28">${t2}</text>
-      </g>
-      <circle cx="${46 - br - 1.5}" cy="${br + 1.5}" r="${br}" fill="#d6a21c" stroke="#fff" stroke-width="2"/>
-      <text x="${46 - br - 1.5}" y="${br + 1.5}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${s1}" fill="#fff">${t1}</text>
-    </svg></div>`;
+// Pin mit Anzahl im Kopf; optional goldenes Abzeichen oben rechts (Anzahl Favoriten)
+// schlanke Form (24 x 34 px), damit viele Pins wenig von der Karte verdecken
+function pinIcon(L, kind, count, favBadge = 0) {
+  const st = PIN_STYLE[kind];
+  const n = count > 99 ? "99+" : String(count);
+  const size = n.length >= 3 ? 6.6 : n.length === 2 ? 8.6 : 9.8;
+  const body = `
+      <path d="M12 33s9.5-10.2 9.5-20.3A9.5 9.5 0 0 0 2.5 12.7C2.5 22.8 12 33 12 33z" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.6"/>
+      <circle cx="12" cy="12.4" r="6.9" fill="${st.inner}"/>
+      ${count > 1 ? `<text x="12" y="12.6" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${size}" fill="${st.text}">${n}</text>` : ""}`;
+  const data = `data-kind="${kind}" data-count="${count > 1 ? n : ""}" data-fav="${favBadge || ""}"`;
+  if (!favBadge) {
+    return L.divIcon({ className: "", html: `<div class="pin" ${data}><svg viewBox="0 0 24 34" width="24" height="34" aria-hidden="true">${body}</svg></div>`,
+      iconSize: [24, 34], iconAnchor: [12, 33], popupAnchor: [0, -30] });
+  }
+  const t1 = favBadge > 99 ? "99+" : String(favBadge);
+  const s1 = t1.length >= 3 ? 5.6 : t1.length === 2 ? 7.2 : 8.2;
+  const br = t1.length >= 2 ? 7.5 : 6.8;
+  return L.divIcon({ className: "", html: `<div class="pin mixed" ${data}><svg viewBox="0 0 34 36" width="34" height="36" aria-hidden="true">
+      <g transform="translate(0 2)">${body}</g>
+      <circle cx="${34 - br - 1.2}" cy="${br + 1.2}" r="${br}" fill="#d6a21c" stroke="#fff" stroke-width="1.6"/>
+      <text x="${34 - br - 1.2}" y="${br + 1.4}" text-anchor="middle" dominant-baseline="central" font-family="system-ui, sans-serif" font-weight="700" font-size="${s1}" fill="#fff">${t1}</text>
+    </svg></div>`, iconSize: [34, 36], iconAnchor: [12, 35], popupAnchor: [0, -31] });
 }
 
 // Startausschnitt: Altensteig in der Mitte, ca. 150 km Umkreis
@@ -651,20 +653,32 @@ function renderMap(app) {
   }
   if (!stay) mapView = null;
   const st = S.state;
-  const list = st.projects.filter(matches);
+  // Welche Arten werden angezeigt? (wird gemerkt)
+  if (!st.mapFilter || typeof st.mapFilter !== "object") st.mapFilter = { fav: true, other: true, archive: false };
+  const f = st.mapFilter;
+  const kindOf = (p) => (st.archivedProjects.includes(p) ? "archive" : p.fav ? "fav" : "other");
+  const list = [...st.projects, ...st.archivedProjects].filter((p) => f[kindOf(p)] && matches(p));
   const onMap = list.filter(geoValid);
   const missing = list.filter((p) => !geoValid(p));
 
+  const chip = (key, label, cls) => `<button type="button" class="map-chip ${cls} ${f[key] ? "on" : ""}" data-filter="${key}" aria-pressed="${f[key] ? "true" : "false"}"><span class="map-dot"></span>${label}</button>`;
   app.appendChild(el(`
-    <div class="page-head"><h1>Karte</h1></div>`));
+    <div class="page-head map-head"><h1>Karte</h1>
+      <div class="map-filter" role="group" aria-label="Anzeigen">
+        ${chip("fav", "Favoriten", "c-fav")}${chip("other", "Weitere BV", "c-other")}${chip("archive", "Archiv", "c-arch")}
+      </div>
+    </div>`));
+  $$(".map-chip").forEach((b) => {
+    b.onclick = () => {
+      f[b.dataset.filter] = !f[b.dataset.filter];
+      saveSoon();
+      render(); // Ausschnitt bleibt erhalten
+    };
+  });
   const card = el(`
     <div class="card map-card">
       <div id="map"></div>
-      <div class="map-info">
-        <span><span class="map-dot" style="background:var(--fav)"></span>Favoriten</span>
-        <span><span class="map-dot" style="background:#8d8c87"></span>weitere Bauvorhaben</span>
-        ${missing.length ? `<button class="map-missing" id="mapMissing" type="button">${missing.length} BV ohne Kartenposition</button>` : ""}
-      </div>
+      ${missing.length ? `<div class="map-info"><button class="map-missing" id="mapMissing" type="button">${missing.length} BV ohne Kartenposition</button></div>` : ""}
     </div>`);
   app.appendChild(card);
 
@@ -691,27 +705,36 @@ function renderMap(app) {
     const groups = new Map();
     for (const p of onMap) {
       const k = p.geo.lat.toFixed(4) + "," + p.geo.lon.toFixed(4);
-      if (!groups.has(k)) groups.set(k, { lat: p.geo.lat, lon: p.geo.lon, place: p.geo.place, fav: [], other: [] });
-      groups.get(k)[p.fav ? "fav" : "other"].push(p);
+      if (!groups.has(k)) groups.set(k, { lat: p.geo.lat, lon: p.geo.lon, place: p.geo.place, fav: [], other: [], archive: [] });
+      groups.get(k)[kindOf(p)].push(p);
     }
-    const pts = [];
     const byNum = (a, b) => a.number.localeCompare(b.number);
     for (const g of groups.values()) {
-      const total = g.fav.length + g.other.length;
-      // ein Pin je Ort, gleicher Umriss; bei Favoriten + weiteren: goldenes Abzeichen mit Anzahl Favoriten
-      const mixed = g.fav.length && g.other.length;
-      const icon = mixed
-        ? L.divIcon({ className: "", html: mixedPinHtml(g.fav.length, g.other.length), iconSize: [46, 46], iconAnchor: [16, 45], popupAnchor: [0, -40] })
-        : L.divIcon({ className: "", html: pinHtml(g.fav.length ? "#d6a21c" : "#8d8c87", total), iconSize: [32, 42], iconAnchor: [16, 41], popupAnchor: [0, -38] });
+      const total = g.fav.length + g.other.length + g.archive.length;
+      // ein Pin je Ort, gleicher Umriss: Farbe nach der "wichtigsten" Art,
+      // Favoriten als goldenes Abzeichen, wenn noch andere Arten am selben Ort sind
+      const kind = g.other.length ? "other" : g.fav.length ? "fav" : "archive";
+      const badge = kind !== "fav" && g.fav.length ? g.fav.length : 0;
+      const icon = pinIcon(L, kind, kind === "other" || kind === "archive" ? total - g.fav.length : total, badge);
       const m = L.marker([g.lat, g.lon], { icon, title: `${g.place}: ${total} BV` }).addTo(map);
-      const sorted = [...g.fav.slice().sort(byNum), ...g.other.slice().sort(byNum)];
-      m.bindPopup(`<div class="map-pop"><h4>${h(g.place)} · ${total} BV</h4>${sorted.map((p) =>
-        `<button type="button" data-pid="${h(p.id)}">${p.fav ? '<span class="star">★</span>' : ""}<span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}</button>`).join("")}</div>`);
-      pts.push([g.lat, g.lon]);
+      const sorted = [...g.fav.sort(byNum), ...g.other.sort(byNum), ...g.archive.sort(byNum)];
+      m.bindPopup(`<div class="map-pop"><h4>${h(g.place)} · ${total} BV</h4>${sorted.map((p) => {
+        const arch = st.archivedProjects.includes(p);
+        return `<button type="button" data-pid="${h(p.id)}" data-arch="${arch ? 1 : ""}">${p.fav && !arch ? '<span class="star">★</span>' : ""}<span class="bv-num">${h(p.number)}</span> ${h(p.client || p.title)}${arch ? ' <span class="arch-tag">Archiv</span>' : ""}</button>`;
+      }).join("")}</div>`);
     }
     map.on("popupopen", (e) => {
       $$("[data-pid]", e.popup.getElement()).forEach((b) => {
-        b.onclick = () => go({ view: "projects", selectedProjectId: b.dataset.pid, selectedDocId: null });
+        b.onclick = () => {
+          if (b.dataset.arch) {
+            // archiviertes BV: im Archiv zeigen
+            const ap = S.state.archivedProjects.find((x) => x.id === b.dataset.pid);
+            filterText = ap ? ap.number : "";
+            go({ view: "archive", selectedProjectId: null, selectedDocId: null });
+          } else {
+            go({ view: "projects", selectedProjectId: b.dataset.pid, selectedDocId: null });
+          }
+        };
       });
     });
     if (mapView) map.setView(mapView.c, mapView.z);

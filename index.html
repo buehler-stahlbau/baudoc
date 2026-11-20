@@ -377,6 +377,17 @@
     .map-pop button { display: flex; gap: 6px; align-items: baseline; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--brand-gray-100); border-radius: 0; padding: 7px 2px; min-height: 0; font-weight: 500; }
     .map-pop button:first-of-type { border-top: 0; }
     .map-pop .star { color: var(--fav); }
+    .map-pop .arch-tag { font-size: .7rem; color: var(--brand-gray-500); border: 1px solid var(--brand-gray-200); border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+    .map-head { flex-wrap: wrap; }
+    .map-filter { display: flex; gap: 6px; flex-wrap: wrap; }
+    .map-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: 999px; background: #fff; border: 1px solid var(--brand-gray-200); font-size: .85rem; font-weight: 600; color: var(--brand-gray-500); }
+    .map-chip .map-dot { margin: 0; width: 11px; height: 11px; box-sizing: border-box; opacity: .45; }
+    .map-chip.c-fav .map-dot { background: var(--fav); }
+    .map-chip.c-other .map-dot { background: #8d8c87; }
+    .map-chip.c-arch .map-dot { background: #fff; border: 2px solid #8d8c87; }
+    .map-chip.on { color: var(--brand-gray-900); border-color: var(--brand-gray-500); background: var(--brand-gray-100); }
+    .map-chip.on .map-dot { opacity: 1; }
+    .map-chip:not(.on) { text-decoration: line-through; text-decoration-color: rgba(0,0,0,.25); }
     .leaflet-container { font: inherit; }
 
     /* ---------- Fotos ---------- */
