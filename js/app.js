@@ -737,6 +737,7 @@ function homeBounds() {
   const dLon = MAP_HOME.radiusKm / (111.32 * Math.cos((MAP_HOME.lat * Math.PI) / 180));
   return [[MAP_HOME.lat - dLat, MAP_HOME.lon - dLon], [MAP_HOME.lat + dLat, MAP_HOME.lon + dLon]];
 }
+let updating = false; // "Jetzt aktualisieren" gedrückt
 let lastRenderedView = null;
 let currentRenderedView = null;
 
@@ -1902,6 +1903,7 @@ async function checkAccount() {
 
   // Browser schließen, während noch hochgeladen wird -> nachfragen (PC)
   window.addEventListener("beforeunload", (e) => {
+    if (updating) return; // "Jetzt aktualisieren": nicht nachfragen (Daten liegen sicher im Gerätespeicher)
     if (od.isSignedIn() && navigator.onLine && (sync.status.kind === "syncing" || sync.status.pending > 0)) {
       saveNow();
       e.preventDefault();
@@ -1960,7 +1962,16 @@ async function checkAccount() {
       if (!swReady) { swReady = true; return; }
       if ($("#updateBar")) return;
       const bar = el(`<div id="updateBar" class="update-bar"><span>Neue Version von Stahlwork verfügbar</span><button class="primary small" type="button">Jetzt aktualisieren</button></div>`);
-      bar.querySelector("button").onclick = async () => { await saveNow(); location.reload(); };
+      const btn = bar.querySelector("button");
+      btn.onclick = async () => {
+        updating = true;
+        btn.disabled = true;
+        btn.textContent = "Wird aktualisiert …";
+        // Zustand sichern (höchstens 2 s warten), dann neu laden
+        await Promise.race([saveNow().catch(() => {}), new Promise((r) => setTimeout(r, 2000))]);
+        location.reload();
+        setTimeout(() => { location.href = location.pathname; }, 2500); // falls der Browser das Neuladen verweigert
+      };
       document.body.appendChild(bar);
     });
   }
